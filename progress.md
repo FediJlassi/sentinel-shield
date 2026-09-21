@@ -7,6 +7,14 @@
 - [x] Task 3: /v1/decision returns allow-all, full DefenseDecision shape,
       hash-chained JSONL trace (traces/run.jsonl), tests pass
 - [x] CLAUDE.md written; trace schema agreed (docs/trace-schema.md)
+- [x] dashboard/: read-only trace viewer (FastAPI + inline HTML/JS, no new
+      deps). Reads `traces/run.jsonl`, shows a run timeline (time, step_id,
+      run_id, candidate action, decision badge, risk_score, reason_codes,
+      explanation), click a row to expand the full event JSON. Polls
+      `/api/events` every 2s; tolerates missing/empty trace file and
+      malformed JSONL lines. Run with:
+      `uv sync --no-install-project && uv run --no-project uvicorn dashboard.app:app --reload --port 8501`
+      then open http://127.0.0.1:8501 (details in dashboard/README.md).
 
 ### In progress
 - [ ] NOTHING — starting Day 1 fresh
