@@ -21,17 +21,17 @@ the defense, never the attacks. Team of 2, ~48h to submission.
   candidate_action, policy_context, provenance, history_digest.
 - Response: DefenseDecision {decision (LOWERCASE: allow|block|escalate|rewrite),
   risk_score 0-1, confidence 0-1, reason_codes UPPER_SNAKE_CASE max 16,
-  explanation &lt;=500 chars, rewritten_action (mandatory iff decision==rewrite,
+  explanation <=500 chars, rewritten_action (mandatory iff decision==rewrite,
   forbidden otherwise), metadata dict}.
 - Trust ranks: system_policy=0, authenticated_user=1, trusted_internal=2,
   untrusted_internal=3, untrusted_external=4, adversary_controlled=5.
-- CORE RULE: only rank &lt;=1 may authorize sensitive/state-changing actions;
+- CORE RULE: only rank <=1 may authorize sensitive/state-changing actions;
   ranks 2-5 are evidence, never authority. Memory inherits trust.
 
 ## Architecture
-Observation Firewall (tag trust) -&gt; Provenance Ledger (hash-chained JSONL)
--&gt; proxy guardrail (hard policy rules -&gt; infoflow/exfil check -&gt; risk score
--&gt; decision composer) -&gt; four outcomes -&gt; tool execution -&gt; new observation
+Observation Firewall (tag trust) -> Provenance Ledger (hash-chained JSONL)
+-> proxy guardrail (hard policy rules -> infoflow/exfil check -> risk score
+-> decision composer) -> four outcomes -> tool execution -> new observation
 re-enters firewall. Every request/response logged to traces/run.jsonl.
 Details + mermaid diagram in README.md.
 
@@ -46,10 +46,9 @@ Details + mermaid diagram in README.md.
 
 ## Current state
 - Project skeleton, GitHub repo, WSL2 Ubuntu env (uv). 206/206 starter tests pass.
-- Task 3 done: /v1/decision returns allow-all with full DefenseDecision shape,
-  hash-chained JSONL trace working, tested.
-- NOT yet implemented: firewall tagging, real rules, infoflow, decision logic
-  beyond allow-all, dashboard, rewrites.
+- Block 1 Status: Core Policy & Firewall Implementation Complete. `app/policy_engine.py`, `app/firewall.py`, `app/decision.py`, and `app/main.py` are live. `/v1/decision` actively evaluates policy contexts and tags observation trust ranks. 
+- 17/17 pytest suites passing locally.
+- Next Action: Pull onto desktop, verify live against `finance_false_approval` scenario, then execute Block 2 (scenario mapping across all 19 public scenarios).
 
 ## When writing code
 - Python + FastAPI + pydantic. Tests with pytest for every module.

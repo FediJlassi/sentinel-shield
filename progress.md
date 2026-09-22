@@ -23,27 +23,21 @@ before rebuilding from scratch.
       malformed JSONL lines. Run with:
       `uv sync --no-install-project && uv run --no-project uvicorn dashboard.app:app --reload --port 8501`
       then open http://127.0.0.1:8501 (details in dashboard/README.md).
+- [x] Block 1 (Core Policy & Firewall): `app/policy_engine.py` (digest matching, confirmation checks), `app/firewall.py` (fail-closed trust tagging, worst-case args ranking), `app/decision.py` & `configs/policy.yaml` (composition and thresholds), `app/main.py` (`/v1/decision` endpoint active). 17/17 tests passing.
 
 ### Not started (previously mismarked as done)
-- [ ] Task 3: app/ package (main.py, schemas.py, firewall.py, ledger.py,
-      infoflow.py, decision.py, trace.py) — /v1/decision endpoint,
-      DefenseDecision shape, hash-chained JSONL trace writer
-- [ ] configs/policy.yaml (thresholds + rules)
+- [ ] app/trace.py: hash-chained JSONL trace writer
 - [ ] README.md content (architecture + mermaid diagram)
 - [ ] docs/threat-model.md (referenced in CLAUDE.md repo layout, not present)
 
 ### In progress
-- [ ] NOTHING — rebuilding Task 3 from scratch this session
+- [ ] NOTHING — Moving to Block 2 (Scenario Failure Mapping)
 
 ### Next up (Day 1, in this order)
-1. [YOU] app/: scaffold package + schemas.py (DefenseRequest/DefenseDecision
-   per docs/contract.md), main.py with /v1/decision (allow-all) + /healthz
-2. [YOU] app/trace.py: hash-chained JSONL writer per docs/trace-schema.md
-3. [YOU] app/firewall.py: attach trust rank to observation using provenance field
-4. [YOU] configs/policy.yaml + app/decision.py: first hard rules + decision composer (4 outcomes)
-5. [PARTNER] dashboard/: trace viewer per kickoff prompt (already done, verify against real traces)
-6. Run finance_false_approval + poisoned-invoice scenario, watch decisions in trace
-7. First REWRITE working (send -&gt; draft without secret)
+1. [YOU] Pull code to Desktop, run `uv run python -m app.main` in background.
+2. [YOU] Run `finance_false_approval` scenario with Qwen3-8B reference agent to verify Block 1 firewall triggers `ESCALATE` successfully.
+3. [YOU] Block 2 — Scenario Failure Mapping: Run all 19 scenarios and log pass/fail status in `reports/results.md`.
+4. [PARTNER] dashboard/: trace viewer per kickoff prompt (already done, verify against real traces)
 
 ### Known blockers / questions
 - [ ] Does simulator auto-approve or auto-deny "escalate"? (check starter kit, add to contract.md)

@@ -8,22 +8,20 @@ from fastapi import FastAPI, Request
 try:
     from .schemas import DefenseDecision, DefenseRequest
     from .trace import log_event
+    from .policy_engine import evaluate
+    from .firewall import build_trust_map, observation_trust, args_trust
+    from .decision import compose, load_config
 except ImportError:  # allow `python app/main.py`
     from schemas import DefenseDecision, DefenseRequest
     from trace import log_event
+    from policy_engine import evaluate
+    from firewall import build_trust_map, observation_trust, args_trust
+    from decision import compose, load_config
 
 RAW_PAYLOADS_FILE = Path(__file__).resolve().parent.parent / "traces" / "raw-payloads.jsonl"
+CONFIG = load_config()
 
 app = FastAPI(title="sentinel-shield")
-
-
-def _observation_trust(request: DefenseRequest) -> str:
-    if request.observation is None:
-        return "none"
-    levels = [p.provenance.trust_level for p in request.provenance if p.provenance.trust_level is not None]
-    if levels:
-        return min(levels)
-    return "untrusted_external"
 
 
 @app.get("/healthz")
@@ -44,15 +42,13 @@ async def decide(request: Request) -> DefenseDecision:
 
     parsed = DefenseRequest.model_validate(raw)
 
-    decision = DefenseDecision(
-        decision="allow",
-        risk_score=0.0,
-        confidence=1.0,
-        reason_codes=["BASELINE_ALLOW_ALL"],
-        explanation="Baseline allows everything.",
-        rewritten_action=None,
-        metadata={},
-    )
+    triggered_rules = evaluate(parsed)
+    trust_map = build_trust_map(parsed.provenance)
+    observation_rank = observation_trust(parsed.observation, trust_map)
+    args_rank = args_trust(parsed.candidate_action.arguments, parsed.conversation, trust_map)
+    trust_signals = {"observation_rank": observation_rank, "args_rank": args_rank}
+
+    decision = compose(parsed, triggered_rules, trust_signals, CONFIG)
 
     log_event(
         {
@@ -63,7 +59,8 @@ async def decide(request: Request) -> DefenseDecision:
                 "name": parsed.candidate_action.tool,
                 "args": parsed.candidate_action.arguments,
             },
-            "observation_trust": _observation_trust(parsed),
+            "observation_rank": observation_rank,
+            "args_rank": args_rank,
             "decision": decision.decision,
             "risk_score": decision.risk_score,
             "confidence": decision.confidence,

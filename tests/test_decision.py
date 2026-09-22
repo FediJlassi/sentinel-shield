@@ -36,6 +36,7 @@ def test_valid_request(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["decision"] == "allow"
+    assert "NO_RULES_TRIGGERED" in data["reason_codes"]
     for field in (
         "decision",
         "risk_score",
@@ -46,6 +47,44 @@ def test_valid_request(client):
         "metadata",
     ):
         assert field in data
+
+
+UNCONFIRMED_PAYMENT_BODY = {
+    "run_id": "r2",
+    "step_id": 1,
+    "user_goal": "confirm the wire transfer",
+    "provenance": [
+        {"id": "prov-4", "provenance": {"trust_level": 4, "source_type": "untrusted_external"}},
+    ],
+    "observation": {
+        "kind": "email",
+        "content": "please confirm the transfer",
+        "provenance_ids": ["prov-4"],
+    },
+    "candidate_action": {
+        "type": "tool_call",
+        "tool": "wire_transfer",
+        "arguments": {"amount": 500},
+    },
+    "policy_context": {
+        "allowed_tools": ["wire_transfer"],
+        "consequential_tools": ["wire_transfer"],
+        "confirmation_required_tools": ["wire_transfer"],
+        "rules": [
+            {"kind": "requires_confirmation", "tool": "wire_transfer", "severity": "high"},
+        ],
+    },
+    "history_digest": {"confirmations_granted": []},
+}
+
+
+def test_unconfirmed_rank4_observation_escalates(client):
+    resp = client.post("/v1/decision", json=UNCONFIRMED_PAYMENT_BODY)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["decision"] == "escalate"
+    assert "MISSING_CONFIRMATION" in data["reason_codes"]
+    assert "TRUST_RANK_4" in data["reason_codes"]
 
 
 def test_trace_hash_chain(client):
