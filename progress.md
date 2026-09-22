@@ -35,7 +35,15 @@
   block+TRUST_RANK_5+ADVERSARY_CONTROL; JS syntax checked with `node --check` and the
   shipped filter/trust-rank functions unit-verified against that real data. dashboard/
   and dashboard/README.md updated; app/ and configs/ untouched.
-- reports/technical-report.md skeleton: NOT STARTED — Session 2.
+- reports/technical-report.md skeleton: DONE — Session 2. All 7 sections
+  written (threat model, hypothesis, method, results, ablations, failure
+  analysis, responsible AI). Method section written from app/ as it
+  actually exists, not from the architecture notes verbatim — flags that
+  the sensitive-content/rewrite logic lives inline in main.py, not in a
+  separate infoflow.py (that file doesn't exist), and that the
+  provenance_check/infoflow ablation toggles referenced in CLAUDE.md aren't
+  in configs/policy.yaml yet. Results/Ablations/Failure-analysis left as
+  placeholders pending the full sweep re-run (real numbers not fabricated).
 - reports/video-script.md storyboard: NOT STARTED — Session 3.
 - All video shots must use --model ollama:qwen3:8b (organizer requirement).
   Decision close-up shot: show reason codes incl. TRUST_RANK_n + explanation naming
