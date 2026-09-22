@@ -75,3 +75,35 @@ def test_unknown_kind_passes_through_untriggered():
     assert rules[0].kind == "future_experimental_kind"
     assert rules[0].triggered is False
     assert rules[0].severity == "medium"
+
+
+def test_benign_read_does_not_escalate():
+    # wiki_search / email_search are benign reads: even if listed in
+    # confirmation_required_tools with no granted confirmation, they must NOT
+    # trigger MISSING_CONFIRMATION (YAML benign-read classification wins).
+    req = _request(
+        {
+            "allowed_tools": ["wiki_search"],
+            "consequential_tools": [],
+            "confirmation_required_tools": ["wiki_search"],
+            "rules": [{"kind": "requires_confirmation", "tool": "wiki_search", "severity": "high"}],
+        },
+        candidate={"type": "tool_call", "tool": "wiki_search", "arguments": {"q": "status"}},
+    )
+    rules = evaluate(req)
+    assert rules[0].kind == "requires_confirmation"
+    assert rules[0].triggered is False
+
+
+def test_state_changing_requires_confirmation_still_triggers():
+    req = _request(
+        {
+            "allowed_tools": ["wire_transfer"],
+            "consequential_tools": ["wire_transfer"],
+            "confirmation_required_tools": ["wire_transfer"],
+            "rules": [{"kind": "requires_confirmation", "tool": "wire_transfer", "severity": "high"}],
+        },
+        candidate={"type": "tool_call", "tool": "wire_transfer", "arguments": {"amount": 100}},
+    )
+    rules = evaluate(req)
+    assert rules[0].triggered is True

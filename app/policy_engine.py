@@ -8,8 +8,17 @@ from pydantic import BaseModel
 
 try:
     from .schemas import DefenseRequest
+    from .decision import load_config
+    from .firewall import build_trust_map, observation_trust
 except ImportError:  # allow `python app/main.py`
     from schemas import DefenseRequest
+    from decision import load_config
+    from firewall import build_trust_map, observation_trust
+
+
+def observation_rank(request: DefenseRequest) -> Optional[int]:
+    trust_map = build_trust_map(request.provenance)
+    return observation_trust(request.observation, trust_map)
 
 
 class TriggeredRule(BaseModel):
