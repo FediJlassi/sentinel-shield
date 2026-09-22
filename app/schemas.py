@@ -11,7 +11,7 @@ class CandidateAction(BaseModel):
     model_config = {"extra": "allow"}
     type: str = ""
     tool: Optional[str] = None
-    arguments: dict[str, Any] = Field(default_factory=dict)
+    arguments: Optional[dict[str, Any]] = Field(default_factory=dict)
     content: Optional[str] = None
     final: bool = False
     confirmation_for: Optional[str] = None

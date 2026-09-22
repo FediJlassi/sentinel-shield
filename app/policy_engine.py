@@ -30,14 +30,16 @@ def action_digest(action) -> str:
             return int(value)
         return value
 
+    arguments = action.arguments if isinstance(action.arguments, dict) else {}
     payload: dict[str, object] = {
         "type": action.type,
         "tool": action.tool,
-        "arguments": {k: canonical(v) for k, v in sorted(action.arguments.items())},
+        "arguments": {k: canonical(v) for k, v in sorted(arguments.items())},
         "content": action.content if action.type != "tool_call" else None,
     }
-    if action.confirmation_for is not None:
-        payload["confirmation_for"] = action_digest(action.confirmation_for)
+    conf = action.confirmation_for
+    if conf is not None and hasattr(conf, "type"):
+        payload["confirmation_for"] = action_digest(conf)
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(encoded).hexdigest()[:24]
 

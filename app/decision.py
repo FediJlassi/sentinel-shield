@@ -16,7 +16,15 @@ RANK_NAMES: dict[int, str] = {
     5: "adversary_controlled",
 }
 
+META_TYPES = {"respond", "request_confirmation", "ask_user"}
+META_TOOLS = {"respond", "request_confirmation", "ask_user"}
+
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "configs" / "policy.yaml"
+
+
+def _is_meta_tool(request: DefenseRequest) -> bool:
+    action = request.candidate_action
+    return (action.type in META_TYPES) or (action.tool in META_TOOLS)
 
 
 def load_config(path: Optional[str] = None) -> dict[str, Any]:
@@ -50,13 +58,17 @@ def compose(
 
     decision = "allow"
     confidence = 0.75
-    tool = request.candidate_action.tool
-    consequential = tool in request.policy_context.consequential_tools
+
+    obs_rank = trust_signals.get("observation_rank")
+    args_rank = trust_signals.get("args_rank")
 
     critical = [r for r in triggered if r.severity == "critical"]
     data_flow = [r for r in triggered if r.kind == "data_flow"]
     requires_conf = [r for r in triggered if r.kind == "requires_confirmation"]
     high = [r for r in triggered if r.severity == "high"]
+
+    adversary = (obs_rank == 5) or (args_rank == 5)
+    is_meta = _is_meta_tool(request)
 
     if critical:
         decision = "block"
@@ -64,38 +76,33 @@ def compose(
         for r in critical:
             reason_codes.append(f"RULE_CRITICAL:{r.kind}")
         explanation_parts.append("critical policy rule triggered")
-    elif data_flow:
+    elif (data_flow or adversary) and not is_meta:
         decision = "block"
-        confidence = 0.9
+        confidence = 0.95 if adversary else 0.9
         for r in data_flow:
             reason_codes.append(f"DATA_FLOW:{r.kind}")
-        explanation_parts.append("data-flow violation detected")
-    elif requires_conf:
+        if adversary:
+            reason_codes.append("ADVERSARY_CONTROL")
+            explanation_parts.append("adversary-controlled content (rank 5) detected")
+        if data_flow:
+            explanation_parts.append("data-flow violation detected")
+    elif (requires_conf or high) and not is_meta:
         decision = "escalate"
         confidence = 0.9
-        for r in requires_conf:
+        for r in [r for r in triggered if r in requires_conf or r in high]:
             reason_codes.append("MISSING_CONFIRMATION")
             reason_codes.append(f"RULE_ID:{r.kind}")
-        explanation_parts.append("consequential action without recorded human confirmation")
-    elif high:
-        if consequential:
-            decision = "escalate"
-            confidence = 0.9
-            reason_codes.append("HIGH_SEVERITY_CONSEQUENTIAL")
-            explanation_parts.append("high-severity rule on a consequential tool")
-        else:
-            decision = "block"
-            confidence = 0.9
-            reason_codes.append("HIGH_SEVERITY")
-            explanation_parts.append("high-severity rule triggered")
+        explanation_parts.append(
+            "high-severity or unconfirmed consequential action requires escalation"
+        )
     else:
         for r in triggered:
             reason_codes.append(f"TRIGGERED:{r.kind}")
         if triggered:
             explanation_parts.append("lower-severity rules triggered")
+        if is_meta and not critical:
+            explanation_parts.append("built-in system tool allowed")
 
-    obs_rank = trust_signals.get("observation_rank")
-    args_rank = trust_signals.get("args_rank")
     if (obs_rank is not None and obs_rank > 1) or (args_rank is not None and args_rank > 1):
         if obs_rank is not None and obs_rank > 1:
             reason_codes.append(f"TRUST_RANK_{obs_rank}")
