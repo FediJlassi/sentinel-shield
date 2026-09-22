@@ -143,3 +143,82 @@ def test_rewritten_action_forbidden_for_allow():
             rewritten_action=CandidateAction(tool="send_email", arguments={}),
             metadata={},
         )
+
+
+REDACTION = "[REDACTED — restricted per policy]"
+CANARY = "CANARY_SECRET_987654321"
+
+
+def _observation_step(run_id, sensitivity="restricted"):
+    return {
+        "run_id": run_id,
+        "step_id": 0,
+        "user_goal": "research",
+        "observation": {
+            "kind": "doc",
+            "content": '{"note": "' + CANARY + '", "ok": true}',
+            "provenance_ids": ["prov-r"],
+        },
+        "candidate_action": {"type": "tool_call", "tool": "read_file", "arguments": {}},
+        "provenance": [
+            {"id": "prov-r", "provenance": {"source_type": "untrusted_external", "trust_level": 3, "sensitivity": sensitivity}},
+        ],
+        "policy_context": {"allowed_tools": ["read_file"], "rules": []},
+    }
+
+
+def _respond_step(run_id, content, final=True):
+    return {
+        "run_id": run_id,
+        "step_id": 1,
+        "user_goal": "research",
+        "candidate_action": {"type": "respond", "tool": None, "arguments": {}, "content": content, "final": final},
+        "policy_context": {"rules": []},
+    }
+
+
+def test_sensitive_respond_redaction(client):
+    import base64
+
+    run_id = "sens-synthetic-1"
+
+    obs = client.post("/v1/decision", json=_observation_step(run_id))
+    assert obs.status_code == 200
+
+    leak = client.post("/v1/decision", json=_respond_step(run_id, f"Here is the answer: {CANARY}"))
+    assert leak.status_code == 200
+    d = leak.json()
+    assert d["decision"] == "rewrite"
+    assert "SENSITIVE_TO_USER_SINK" in d["reason_codes"]
+    assert "REDACTED" in d["reason_codes"]
+    assert CANARY not in d["rewritten_action"]["content"]
+    assert REDACTION in d["rewritten_action"]["content"]
+    assert "restricted" in d["explanation"]
+
+    clean = client.post("/v1/decision", json=_respond_step(run_id, "The benign facts are 1+1=2."))
+    assert clean.status_code == 200
+    assert clean.json()["decision"] == "allow"
+
+    b64 = base64.b64encode(CANARY.encode()).decode()
+    encoded = client.post("/v1/decision", json=_respond_step(run_id, b64))
+    assert encoded.status_code == 200
+    ed = encoded.json()
+    assert ed["decision"] == "rewrite"
+    assert CANARY not in ed["rewritten_action"]["content"]
+
+
+def test_respond_skips_tool_permission(client):
+    run_id = "sens-synthetic-2"
+    body = {
+        "run_id": run_id,
+        "step_id": 1,
+        "user_goal": "x",
+        "candidate_action": {"type": "respond", "tool": None, "arguments": {}, "content": "hi", "final": True},
+        "policy_context": {
+            "allowed_tools": [],
+            "rules": [{"kind": "tool_permission", "tool": "read_file", "severity": "high"}],
+        },
+    }
+    resp = client.post("/v1/decision", json=body)
+    assert resp.status_code == 200
+    assert "RULE_TOOL_PERMISSION" not in resp.json()["reason_codes"]

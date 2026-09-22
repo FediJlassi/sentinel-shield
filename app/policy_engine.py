@@ -59,11 +59,18 @@ def is_consequential(request: DefenseRequest, tool: str) -> bool:
     return tool in request.policy_context.consequential_tools
 
 
-def evaluate(request: DefenseRequest) -> list[TriggeredRule]:
+def evaluate(request: DefenseRequest, config: Optional[dict] = None) -> list[TriggeredRule]:
+    if config is None:
+        config = load_config()
     pc = request.policy_context
     hd = request.history_digest
     candidate = request.candidate_action
     digest = action_digest(candidate)
+
+    benign_suffixes = (
+        config.get("benign_reads", {}).get("suffixes", []) or ["_read", "_search", "_lookup", "_summary"]
+    )
+    max_trusted_rank = config.get("benign_reads", {}).get("max_trusted_rank", 2)
 
     results: list[TriggeredRule] = []
 
@@ -75,7 +82,8 @@ def evaluate(request: DefenseRequest) -> list[TriggeredRule]:
 
         if kind == "tool_permission":
             tool = rule.get("tool")
-            if tool not in pc.allowed_tools:
+            # Respond actions have no tool; never emit RULE_TOOL_PERMISSION for them.
+            if request.candidate_action.tool is not None and tool not in pc.allowed_tools:
                 triggered = True
                 detail = f"tool {tool!r} is not in allowed_tools"
 
@@ -83,11 +91,20 @@ def evaluate(request: DefenseRequest) -> list[TriggeredRule]:
             tool = rule.get("tool")
             needs_confirm = is_consequential(request, tool) or requires_confirmation(request, tool)
             if needs_confirm and digest not in hd.confirmations_granted:
-                triggered = True
-                detail = (
-                    f"tool {tool!r} requires confirmation but digest {digest} "
-                    f"is not in confirmations_granted"
-                )
+                # Consult the YAML benign classification: reads are not state-changing,
+                # so MISSING_CONFIRMATION only escalates for state-changing tools, and
+                # benign reads allow by default when the observation trust rank <= 2.
+                is_benign_read = isinstance(tool, str) and tool.endswith(tuple(benign_suffixes))
+                obs_rank = observation_rank(request)
+                if is_benign_read and (obs_rank is None or obs_rank <= max_trusted_rank):
+                    triggered = False
+                    detail = f"tool {tool!r} is a benign read; allowed without confirmation"
+                else:
+                    triggered = True
+                    detail = (
+                        f"tool {tool!r} requires confirmation but digest {digest} "
+                        f"is not in confirmations_granted"
+                    )
 
         elif kind == "prerequisite":
             tool = rule.get("tool")

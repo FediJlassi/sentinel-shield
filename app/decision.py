@@ -6,7 +6,10 @@ from typing import Any, Optional
 
 import yaml
 
-from .schemas import DefenseDecision, DefenseRequest
+try:
+    from .schemas import DefenseDecision, DefenseRequest
+except ImportError:  # allow `python app/main.py`
+    from schemas import DefenseDecision, DefenseRequest
 
 _CODE_SANITIZE = re.compile(r"[^A-Z0-9_]")
 
