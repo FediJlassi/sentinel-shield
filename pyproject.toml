@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.13.5",
     "pytest>=9.1.1",
     "uvicorn[standard]>=0.53.0",
+    "httpx>=0.28.1",
 ]
 
 [build-system]
@@ -20,3 +21,6 @@ build-backend = "uv_build"
 
 [tool.uv]
 package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
