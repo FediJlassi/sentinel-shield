@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -21,7 +21,7 @@ class ProvenanceDetail(BaseModel):
     model_config = {"extra": "allow"}
     source_type: Optional[str] = None
     source_id: Optional[str] = None
-    trust_level: Optional[int] = None
+    trust_level: Optional[Union[str, int]] = None
     origin_actor: Optional[str] = None
     retrieved_via: Optional[str] = None
     sensitivity: Optional[str] = None
@@ -46,7 +46,7 @@ class ObservationView(BaseModel):
 class PolicyContext(BaseModel):
     model_config = {"extra": "allow"}
     policy_id: Optional[str] = None
-    policy_version: Optional[str] = None
+    policy_version: Optional[Union[str, int]] = None
     allowed_tools: list[str] = Field(default_factory=list)
     confirmation_required_tools: list[str] = Field(default_factory=list)
     consequential_tools: list[str] = Field(default_factory=list)
