@@ -241,6 +241,93 @@ PAGE_HTML = """<!doctype html>
     font-size: 11px;
     color: var(--muted);
   }
+  .trust-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid var(--escalate);
+    color: var(--escalate);
+  }
+  .trust-badge.high {
+    border-color: var(--block);
+    color: var(--block);
+  }
+  #filter-bar {
+    padding: 8px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+  }
+  #filter-bar .group-label {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .filter-toggle {
+    background: var(--panel);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .filter-toggle .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--unknown);
+  }
+  .filter-toggle[data-active="true"] { color: var(--text); border-color: var(--muted); }
+  .filter-toggle[data-decision="allow"][data-active="true"] .dot { background: var(--allow); }
+  .filter-toggle[data-decision="block"][data-active="true"] .dot { background: var(--block); }
+  .filter-toggle[data-decision="escalate"][data-active="true"] .dot { background: var(--escalate); }
+  .filter-toggle[data-decision="rewrite"][data-active="true"] .dot { background: var(--rewrite); }
+  #run-select {
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-family: inherit;
+    font-size: 12px;
+  }
+  #legend {
+    padding: 8px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 11px;
+  }
+  #legend .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  #legend .swatch {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+  }
+  #legend .swatch.allow { background: var(--allow); }
+  #legend .swatch.block { background: var(--block); }
+  #legend .swatch.escalate { background: var(--escalate); }
+  #legend .swatch.rewrite { background: var(--rewrite); }
+  #legend .swatch.trust { background: none; border: 1px solid var(--escalate); }
 </style>
 </head>
 <body>
@@ -251,6 +338,24 @@ PAGE_HTML = """<!doctype html>
   <label class="toggle"><input type="checkbox" id="auto-refresh" checked> auto-refresh</label>
   <button id="reload-btn">Reload</button>
 </header>
+<div id="filter-bar">
+  <span class="group-label">Decision</span>
+  <button class="filter-toggle" data-decision="allow" data-active="true"><span class="dot"></span>allow</button>
+  <button class="filter-toggle" data-decision="block" data-active="true"><span class="dot"></span>block</button>
+  <button class="filter-toggle" data-decision="escalate" data-active="true"><span class="dot"></span>escalate</button>
+  <button class="filter-toggle" data-decision="rewrite" data-active="true"><span class="dot"></span>rewrite</button>
+  <span class="group-label" style="margin-left:10px">Run</span>
+  <select id="run-select">
+    <option value="">All runs</option>
+  </select>
+</div>
+<div id="legend">
+  <span class="legend-item"><span class="swatch allow"></span>allow &mdash; permitted, no policy concern</span>
+  <span class="legend-item"><span class="swatch block"></span>block &mdash; denied, policy violation</span>
+  <span class="legend-item"><span class="swatch escalate"></span>escalate &mdash; sent to human confirmation</span>
+  <span class="legend-item"><span class="swatch rewrite"></span>rewrite &mdash; response redacted before returning</span>
+  <span class="legend-item"><span class="swatch trust"></span>trust badge &mdash; evidence rank &gt; 1 (never authorizes)</span>
+</div>
 <div id="status-bar"></div>
 <div id="errors" class="hidden"></div>
 <main>
@@ -262,6 +367,7 @@ PAGE_HTML = """<!doctype html>
         <th>Run</th>
         <th>Candidate Action</th>
         <th>Decision</th>
+        <th>Trust</th>
         <th>Risk</th>
         <th>Reason Codes</th>
         <th>Explanation</th>
@@ -310,6 +416,31 @@ function fmtRisk(v) {
   return typeof v === "number" ? v.toFixed(2) : "-";
 }
 
+const TRUST_RANK_RE = /^TRUST_RANK_(\d+)$/;
+
+function maxTrustRank(event) {
+  const codes = Array.isArray(event.reason_codes) ? event.reason_codes : [];
+  let max = null;
+  for (const code of codes) {
+    const m = TRUST_RANK_RE.exec(String(code));
+    if (m) {
+      const rank = parseInt(m[1], 10);
+      if (max === null || rank > max) max = rank;
+    }
+  }
+  return max;
+}
+
+function fmtTrust(event) {
+  const rank = maxTrustRank(event);
+  if (rank === null) return el("span", { text: "-" });
+  const badge = el("span", {
+    className: "trust-badge" + (rank >= 4 ? " high" : ""),
+    text: "RANK " + rank,
+  });
+  return badge;
+}
+
 function buildRow(event, idx) {
   const row = el("tr", { className: "event-row" });
 
@@ -326,6 +457,9 @@ function buildRow(event, idx) {
   });
   tDecision.appendChild(badge);
 
+  const tTrust = el("td", { className: "mono-cell" });
+  tTrust.appendChild(fmtTrust(event));
+
   const tRisk = el("td", { className: "mono-cell", text: fmtRisk(event.risk_score) });
 
   const tReasons = el("td");
@@ -340,11 +474,11 @@ function buildRow(event, idx) {
 
   const tExplanation = el("td", { className: "truncate", text: event.explanation ?? "-" });
 
-  row.append(tTime, tStep, tRun, tAction, tDecision, tRisk, tReasons, tExplanation);
+  row.append(tTime, tStep, tRun, tAction, tDecision, tTrust, tRisk, tReasons, tExplanation);
 
   const detailRow = el("tr", { className: "detail-row hidden" });
   const detailCell = el("td");
-  detailCell.colSpan = 8;
+  detailCell.colSpan = 9;
   const pre = el("pre", { text: JSON.stringify(event, null, 2) });
   detailCell.appendChild(pre);
   detailRow.appendChild(detailCell);
@@ -356,10 +490,66 @@ function buildRow(event, idx) {
   return [row, detailRow];
 }
 
+let allEvents = [];
+const activeDecisions = new Set(["allow", "block", "escalate", "rewrite"]);
+let selectedRun = "";
+
+function populateRunSelect(events) {
+  const select = document.getElementById("run-select");
+  const runIds = [...new Set(events.map((e) => e.run_id).filter((r) => r))].sort();
+  const previous = select.value;
+  select.innerHTML = "";
+  select.appendChild(el("option", { text: "All runs" }));
+  select.querySelector("option").value = "";
+  for (const runId of runIds) {
+    const opt = el("option", { text: runId });
+    opt.value = runId;
+    select.appendChild(opt);
+  }
+  // Keep the previous selection if it's still a valid run_id, else fall back to "All runs".
+  select.value = runIds.includes(previous) ? previous : "";
+  selectedRun = select.value;
+}
+
+function filteredEvents() {
+  return allEvents.filter((e) => {
+    const decision = (e.decision ?? "unknown").toString();
+    if (!activeDecisions.has(decision)) return false;
+    if (selectedRun && e.run_id !== selectedRun) return false;
+    return true;
+  });
+}
+
+function renderTable() {
+  const tbody = document.getElementById("events-body");
+  const emptyState = document.getElementById("empty-state");
+  const table = document.getElementById("events-table");
+
+  tbody.innerHTML = "";
+  const events = filteredEvents();
+
+  if (events.length === 0) {
+    emptyState.classList.remove("hidden");
+    emptyState.textContent = allEvents.length === 0
+      ? "Nothing to show yet. Start a run against the defense proxy to populate traces/run.jsonl."
+      : "No events match the current filters.";
+    table.classList.add("hidden");
+    return;
+  }
+
+  emptyState.classList.add("hidden");
+  table.classList.remove("hidden");
+
+  events.forEach((event, idx) => {
+    const [row, detailRow] = buildRow(event, idx);
+    tbody.appendChild(row);
+    tbody.appendChild(detailRow);
+  });
+}
+
 async function refresh() {
   const statusBar = document.getElementById("status-bar");
   const errorsBox = document.getElementById("errors");
-  const tbody = document.getElementById("events-body");
   const emptyState = document.getElementById("empty-state");
   const pathLabel = document.getElementById("trace-path");
 
@@ -390,29 +580,45 @@ async function refresh() {
     errorsBox.textContent = "";
   }
 
-  tbody.innerHTML = "";
-  const events = data.events || [];
-
-  if (events.length === 0) {
+  allEvents = data.events || [];
+  if (!data.exists || allEvents.length === 0) {
     emptyState.classList.remove("hidden");
     emptyState.textContent = data.exists
       ? "Trace file is empty."
       : "Nothing to show yet. Start a run against the defense proxy to populate traces/run.jsonl.";
     document.getElementById("events-table").classList.add("hidden");
+    document.getElementById("events-body").innerHTML = "";
     return;
   }
 
-  emptyState.classList.add("hidden");
-  document.getElementById("events-table").classList.remove("hidden");
-
-  events.forEach((event, idx) => {
-    const [row, detailRow] = buildRow(event, idx);
-    tbody.appendChild(row);
-    tbody.appendChild(detailRow);
-  });
+  populateRunSelect(allEvents);
+  renderTable();
 }
 
 document.getElementById("reload-btn").addEventListener("click", refresh);
+
+for (const btn of document.querySelectorAll(".filter-toggle")) {
+  btn.addEventListener("click", () => {
+    const decision = btn.dataset.decision;
+    const isActive = btn.dataset.active === "true";
+    // Never allow toggling to zero active filters - that's indistinguishable from
+    // "no events" and hides the table instead of communicating "nothing selected".
+    if (isActive && activeDecisions.size === 1) return;
+    if (isActive) {
+      activeDecisions.delete(decision);
+      btn.dataset.active = "false";
+    } else {
+      activeDecisions.add(decision);
+      btn.dataset.active = "true";
+    }
+    renderTable();
+  });
+}
+
+document.getElementById("run-select").addEventListener("change", (e) => {
+  selectedRun = e.target.value;
+  renderTable();
+});
 
 let intervalId = null;
 function setupAutoRefresh() {

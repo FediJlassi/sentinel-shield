@@ -9,10 +9,24 @@ point it at a trace file while or after a run.
 
 One row per trace event: timestamp, `step_id`, `run_id`, candidate action
 (`name(args)`), decision as a color-coded badge (green=allow, red=block,
-yellow=escalate, blue=rewrite), `risk_score`, `reason_codes`, and
-`explanation`. Click a row to expand the full raw JSON for that event
-(including `rewritten_action`, `provenance`/`observation_trust`, etc., when
-present).
+yellow=escalate, blue=rewrite), a trust-rank badge, `risk_score`,
+`reason_codes`, and `explanation`. Click a row to expand the full raw JSON
+for that event (including `rewritten_action`, `provenance`/
+`observation_trust`, etc., when present).
+
+The trust-rank badge is parsed client-side from `reason_codes` entries
+matching `TRUST_RANK_<n>` (there is no separate `trust_rank` field in the
+trace schema — see app/decision.py); rank 4-5 (untrusted_external /
+adversary_controlled) renders in the block color to make the highest-risk
+evidence easy to spot at a glance. Events with no `TRUST_RANK_*` code (rank
+<= 1, or no provenance-backed observation) show `-`.
+
+A filter bar above the table lets you toggle allow/block/escalate/rewrite
+rows on or off, and, when the trace contains more than one `run_id`, a "Run"
+dropdown narrows the table to a single run. A legend under the filter bar
+spells out what each decision color and the trust badge mean. All
+filtering happens client-side against the already-fetched events, so it has
+no effect on `/api/events` or the underlying trace file.
 
 It polls `/api/events` every 2s (toggle "auto-refresh" to stop) so you can
 watch a run land in real time, and has a manual "Reload" button.
