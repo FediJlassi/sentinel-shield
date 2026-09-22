@@ -44,7 +44,16 @@
   provenance_check/infoflow ablation toggles referenced in CLAUDE.md aren't
   in configs/policy.yaml yet. Results/Ablations/Failure-analysis left as
   placeholders pending the full sweep re-run (real numbers not fabricated).
-- reports/video-script.md storyboard: NOT STARTED — Session 3.
+- reports/video-script.md storyboard: DONE — Session 3. 6:30-8:00 shot list
+  built around the verified finance_false_approval attack anatomy from
+  docs/contract.md (matches the one row already in reports/results.md):
+  benign task completing, attack reaching the defense live in the trace,
+  decision close-up (escalate + TRUST_RANK_n + rank-≤1 explanation),
+  secure-outcome comparison, 30s architecture, 30s limitations. Exact run
+  command corrected to match docs/contract.md
+  (--defense-url .../v1/decision --model ollama:qwen3:8b). Screenshots
+  specified match what Session 1 actually built (filter bar, legend, trust
+  badge column, row-click detail JSON).
 - All video shots must use --model ollama:qwen3:8b (organizer requirement).
   Decision close-up shot: show reason codes incl. TRUST_RANK_n + explanation naming
   the rank ≤1 source required to authorize.
