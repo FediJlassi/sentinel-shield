@@ -16,7 +16,16 @@ class CandidateAction(BaseModel):
     arguments: Optional[dict[str, Any]] = Field(default_factory=dict)
     content: Optional[str] = None
     final: bool = False
-    confirmation_for: Optional[str] = None
+    confirmation_for: Optional[Union[str, dict]] = None
+
+    @field_validator("confirmation_for", mode="before")
+    @classmethod
+    def _coerce_confirmation_for(cls, v: object) -> object:
+        # The simulator sometimes sends a copy of the action being confirmed
+        # (a dict) instead of a string/null. We never need its content.
+        if isinstance(v, dict):
+            return None
+        return v
 
 
 class ProvenanceDetail(BaseModel):
@@ -72,11 +81,11 @@ class DefenseRequest(BaseModel):
     run_id: str = ""
     step_id: int = 0
     user_goal: str = ""
-    conversation: list[dict[str, Any]] = Field(default_factory=list)
-    observation: Optional[ObservationView] = None
+    conversation: list[Any] = Field(default_factory=list)
+    observation: Optional[Any] = None
     candidate_action: CandidateAction = Field(default_factory=CandidateAction)
     policy_context: PolicyContext = Field(default_factory=PolicyContext)
-    provenance: list[ProvenanceRecord] = Field(default_factory=list)
+    provenance: list[Any] = Field(default_factory=list)
     history_digest: HistoryDigest = Field(default_factory=HistoryDigest)
 
 

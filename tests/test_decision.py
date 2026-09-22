@@ -78,6 +78,39 @@ UNCONFIRMED_PAYMENT_BODY = {
 }
 
 
+def test_confirmation_for_as_dict_validates(client):
+    body = dict(VALID_BODY)
+    body["candidate_action"] = {
+        "type": "tool_call",
+        "tool": "send_email",
+        "arguments": {"to": "a@b.c"},
+        "confirmation_for": {"type": "tool_call", "tool": "wire_transfer", "arguments": {"amount": 5}},
+    }
+    resp = client.post("/v1/decision", json=body)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["decision"] == "allow"
+    assert "NO_RULES_TRIGGERED" in data["reason_codes"]
+
+
+def test_request_confirmation_short_circuit_malformed(client):
+    body = {
+        "candidate_action": {
+            "tool": "request_confirmation",
+            "type": "request_confirmation",
+            "arguments": "not-a-dict",
+        },
+        "policy_context": "garbage",
+        "provenance": "bad",
+        "history_digest": 123,
+    }
+    resp = client.post("/v1/decision", json=body)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["decision"] == "allow"
+    assert "SYSTEM_CONFIRMATION" in data["reason_codes"]
+
+
 def test_unconfirmed_rank4_observation_escalates(client):
     resp = client.post("/v1/decision", json=UNCONFIRMED_PAYMENT_BODY)
     assert resp.status_code == 200

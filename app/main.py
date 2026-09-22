@@ -40,6 +40,41 @@ async def decide(request: Request) -> DefenseDecision:
     raw = await request.json()
     _append_raw(raw)
 
+    # Hard short-circuit: the agent calls request_confirmation after a human
+    # denial to receive the verdict. This must NEVER reach policy_engine — any
+    # exception here causes infinite DEFENSE_UNAVAILABLE retry loops.
+    ca = raw.get("candidate_action") if isinstance(raw, dict) else None
+    if isinstance(ca, dict) and ca.get("tool") == "request_confirmation" or (
+        isinstance(ca, dict) and ca.get("type") == "request_confirmation"
+    ):
+        decision = DefenseDecision(
+            decision="allow",
+            risk_score=0.0,
+            confidence=1.0,
+            reason_codes=["SYSTEM_CONFIRMATION"],
+            explanation="system confirmation relay",
+            rewritten_action=None,
+            metadata={},
+        )
+        try:
+            log_event(
+                {
+                    "run_id": raw.get("run_id") if isinstance(raw, dict) else None,
+                    "step_id": raw.get("step_id") if isinstance(raw, dict) else None,
+                    "user_goal": raw.get("user_goal") if isinstance(raw, dict) else None,
+                    "candidate_action": {"name": ca.get("tool"), "args": ca.get("arguments")},
+                    "decision": decision.decision,
+                    "risk_score": decision.risk_score,
+                    "confidence": decision.confidence,
+                    "reason_codes": decision.reason_codes,
+                    "explanation": decision.explanation,
+                    "rewritten_action": None,
+                }
+            )
+        except Exception:
+            pass
+        return decision
+
     parsed = DefenseRequest.model_validate(raw)
 
     triggered_rules = evaluate(parsed)

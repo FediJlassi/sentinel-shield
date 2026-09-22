@@ -1,49 +1,40 @@
-# progress.md — read this first at every session start
+# progress.md — SENTINEL Shield
 
-## Status: start of Day 1 — CORRECTED 2026-09-21
-### ⚠️ Reconciliation note (2026-09-21)
-This file and CLAUDE.md previously claimed Task 3 (app/ package, allow-all
-`/v1/decision`, hash-chained trace) was done. Verified against the actual
-repo on disk and `git log --all -- app/ configs/`: **neither `app/` nor
-`configs/` has ever existed, on any branch.** README.md is also empty
-(CLAUDE.md says it should hold the architecture + mermaid diagram).
-Task 3 is being treated as NOT started until it exists in this repo.
-If a teammate has this work locally on another machine, pull/merge it
-before rebuilding from scratch.
+## 22/09 — Day 1 (Fedi, defense track)
+- 17:10 Contract updated + pushed: escalate semantics verified from simulator source
+  (human_confirm → is_legitimate, NOT auto-approve); canaries discovered
+  (secret_token kinds, planted in trusted_internal docs, sensitivity=restricted —
+  exfil detection must key on sensitivity, not trust rank).
+- 17:30–22:00 Prompts A/B/C built: policy_engine.py (action_digest copied exactly from
+  starter kit), firewall.py (trust map, fail-closed), decision.py + configs/policy.yaml
+  (outcome ladder, YAML thresholds), wired into /v1/decision.
+- Qwen3-8B running on desktop via ollama:qwen3:8b — real agent confirmed working.
+- 22:00 Full 19-scenario sweep with real agent. Failure map (pre-fix):
+  * DOMINANT: 8 enterprise scenarios — canary leaks into final respond, ALLOWED
+    (infoflow keyed on trust rank; canary docs are rank 2). Fix: sensitivity-keyed
+    respond scanning + REWRITE with redaction.
+  * request_confirmation retry loops → max_steps, killing task_success in ~6 scenarios.
+    Fix: instant allow for request_confirmation before parsing.
+  * Intermittent 500s: confirmation_for sometimes arrives as nested DICT, not str/None.
+    Fix: Union[str, dict] + coerce to None.
+  * Over-escalation: benign reads escalate (MISSING_CONFIRMATION on _read/_search).
+    Fix: YAML calibration — allow benign reads, escalate only consequential.
+- 22:30 Three fix prompts sent to Kilo; outputs + re-runs land before sleep.
+  TODO on wake: verify fixes, re-run interrupted SOC/finance scenarios, full sweep
+  with MOCK model for results.md table.
 
-### Done
-- [x] Repo + GitHub + WSL2 env (206/206 starter tests pass)
-- [x] Task 2: simulator contract documented (docs/contract.md)
-- [x] CLAUDE.md written; trace schema agreed (docs/trace-schema.md)
-- [x] dashboard/: read-only trace viewer (FastAPI + inline HTML/JS, no new
-      deps). Reads `traces/run.jsonl`, shows a run timeline (time, step_id,
-      run_id, candidate action, decision badge, risk_score, reason_codes,
-      explanation), click a row to expand the full event JSON. Polls
-      `/api/events` every 2s; tolerates missing/empty trace file and
-      malformed JSONL lines. Run with:
-      `uv sync --no-install-project && uv run --no-project uvicorn dashboard.app:app --reload --port 8501`
-      then open http://127.0.0.1:8501 (details in dashboard/README.md).
-- [x] Block 1 (Core Policy & Firewall): `app/policy_engine.py` (digest matching, confirmation checks), `app/firewall.py` (fail-closed trust tagging, worst-case args ranking), `app/decision.py` & `configs/policy.yaml` (composition and thresholds), `app/main.py` (`/v1/decision` endpoint active). 17/17 tests passing.
+## 22/09 — Partner track (Claude Code)
+- Dashboard polish (filter/run-dropdown/legend): NOT STARTED — start here, Session 1.
+- reports/technical-report.md skeleton: NOT STARTED — Session 2.
+- reports/video-script.md storyboard: NOT STARTED — Session 3.
+- All video shots must use --model ollama:qwen3:8b (organizer requirement).
+  Decision close-up shot: show reason codes incl. TRUST_RANK_n + explanation naming
+  the rank ≤1 source required to authorize.
 
-### Not started (previously mismarked as done)
-- [ ] app/trace.py: hash-chained JSONL trace writer
-- [ ] README.md content (architecture + mermaid diagram)
-- [ ] docs/threat-model.md (referenced in CLAUDE.md repo layout, not present)
-
-### In progress
-- [ ] NOTHING — Moving to Block 2 (Scenario Failure Mapping)
-
-### Next up (Day 1, in this order)
-1. [YOU] Pull code to Desktop, run `uv run python -m app.main` in background.
-2. [YOU] Run `finance_false_approval` scenario with Qwen3-8B reference agent to verify Block 1 firewall triggers `ESCALATE` successfully.
-3. [YOU] Block 2 — Scenario Failure Mapping: Run all 19 scenarios and log pass/fail status in `reports/results.md`.
-4. [PARTNER] dashboard/: trace viewer per kickoff prompt (already done, verify against real traces)
-
-### Known blockers / questions
-- [ ] Does simulator auto-approve or auto-deny "escalate"? (check starter kit, add to contract.md)
-- [ ] Does simulator validate rewritten_action schema? (check, add to contract.md)
-
-### Rules reminder
-- decisions lowercase; rewritten_action ONLY on rewrite; never scenario-specific hacks
-- commit after every working state; pull before every session; app/ owned by YOU, dashboard/ by PARTNER
-- verify claimed "done" work actually exists in git before building on top of it
+## Standing TODOs
+- Re-run Ctrl+C'd scenarios after fixes (soc_*, finance_refund_confirmed, split_settlement).
+- results.md table from mock-model sweep (19 scenarios + hard negatives).
+- Ablation toggles in configs/policy.yaml (provenance_check, infoflow) — 5 scenarios × 2.
+- REWRITE demo scenario for video (canary-redacted respond is now the candidate).
+- README + mermaid diagram, threat-model.md, technical report numbers.
+- Defense freeze 23/09 15:00. Submit 23:00. Deadline 23:59.

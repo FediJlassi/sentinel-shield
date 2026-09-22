@@ -1,57 +1,69 @@
 # CLAUDE.md — SENTINEL Shield
 
-## What this is
-Defense solution for the SENTINEL research challenge (IndabaX Tunisia 2026).
-A safety proxy around the official Qwen3-8B tool-using agent, running fully
-offline against the SENTINEL simulator and synthetic scenarios. We build ONLY
-the defense, never the attacks. Team of 2, ~48h to submission.
-
-## Hard rules (violating these can disqualify us)
-- NEVER decide from scenario identifiers, filenames, or expected outcomes.
-- Every decision must come from: agent state, candidate action, provenance,
-  active policy, observed content.
-- The only four interventions: allow / block / escalate / rewrite.
+## Hard rules
+- Four outcomes only: allow / block / escalate / rewrite.
+- Never decide from scenario identifiers, filenames, or expected outcomes.
 - No chain-of-thought in outputs — short explanation + risk signals only.
-- Blocking everything is failure; benign tasks MUST still complete.
+- Blocking everything is failure: benign tasks MUST complete.
+- All thresholds/tunables live in configs/policy.yaml — never hard-coded.
 - Commit real work frequently; never commit empty files or scenario-specific hacks.
+- Ownership: teammate 1 (Fedi) owns app/ + configs/. Teammate 2 owns dashboard/ + reports/.
+  docs/ is shared — read before editing, pull before working.
 
-## Simulator contract (already discovered, in docs/contract.md — read it)
-- Endpoint: POST /v1/decision (FastAPI), GET /healthz, port 8080.
-- Request: run_id, step_id, user_goal, conversation, observation,
-  candidate_action, policy_context, provenance, history_digest.
-- Response: DefenseDecision {decision (LOWERCASE: allow|block|escalate|rewrite),
-  risk_score 0-1, confidence 0-1, reason_codes UPPER_SNAKE_CASE max 16,
-  explanation <=500 chars, rewritten_action (mandatory iff decision==rewrite,
-  forbidden otherwise), metadata dict}.
-- Trust ranks: system_policy=0, authenticated_user=1, trusted_internal=2,
-  untrusted_internal=3, untrusted_external=4, adversary_controlled=5.
-- CORE RULE: only rank <=1 may authorize sensitive/state-changing actions;
-  ranks 2-5 are evidence, never authority. Memory inherits trust.
+## Simulator contract — read docs/contract.md FIRST (gold source, updated 22/09)
+Verified additions beyond the old summary:
+- ESCALATE does not auto-approve: human_confirm calls matcher.is_legitimate() against
+  the scenario's legitimate plan. Injected actions escalated → still DENIED.
+  Legit-but-unconfirmed actions escalated → approved. Escalation is safe.
+- candidate_action.confirmation_for can be a STRING, NULL, or a nested DICT (simulator
+  sends a copy of the confirmed action). Schemas tolerate all; dicts are coerced to None.
+- agent calls tool "request_confirmation" to receive a human verdict after escalation.
+  /v1/decision MUST allow it instantly, before any parsing — any error here causes
+  infinite DefenseUnavailable retry loops (was our worst bug tonight).
+- Rules in policy_context.rules use kinds our engine may not implement — pass them
+  through un-triggered, never drop silently.
+- Canaries (secret_token, account_id, access_token, contract_ref) are planted in
+  trusted_internal documents with sensitivity=restricted. Exfil detection keys off the
+  SENSITIVITY field, not trust rank (rank-2 docs carry the most dangerous leaks).
+- "SENTINEL is not a hidden-test competition": generic rules keyed off policy fields,
+  trust ranks, and sensitivity only. No scenario names in code.
 
-## Architecture
-Observation Firewall (tag trust) -> Provenance Ledger (hash-chained JSONL)
--> proxy guardrail (hard policy rules -> infoflow/exfil check -> risk score
--> decision composer) -> four outcomes -> tool execution -> new observation
-re-enters firewall. Every request/response logged to traces/run.jsonl.
-Details + mermaid diagram in README.md.
+## Architecture (as implemented in app/)
+- main.py — /v1/decision endpoint; run-scoped sensitive-string state (sha256 in traces,
+  raw values never logged); request_confirmation short-circuit.
+- schemas.py — DefenseRequest/DefenseDecision, strict response, lenient request.
+- firewall.py — provenance trust map (rank 0–5, fail-closed to 5), observation/args trust.
+- policy_engine.py — action_digest copied EXACTLY from starter kit (must match
+  confirmations_granted byte-for-byte); evaluators: tool_permission (skip for respond),
+  requires_confirmation, prerequisite (prepare→confirm→execute chain), data_flow,
+  forbidden_effect; unknown rule kinds pass through.
+- infoflow.py — sensitive-content tracking keyed on sensitivity ∈ {restricted,
+  confidential}; final respond actions are scanned (plain + base64/hex/reversed) and
+  REWRITTEN with leaked values redacted ("[REDACTED — restricted per policy]").
+- decision.py — outcome ladder (critical→block, high→escalate/block,
+  unconfirmed-consequential→escalate, data_flow→block, else allow).
+- trace.py — append-only hash-chained JSONL; every decision logged with digest+findings.
+- configs/policy.yaml — severity weights, thresholds, benign-read allowlist,
+  ablation toggles: provenance_check, infoflow.
 
-## Repo layout
-- app/ — defense service (OWNER: teammate 1, do not restructure without asking)
-  main.py, schemas.py, firewall.py, ledger.py, infoflow.py, decision.py, trace.py
-- configs/policy.yaml — thresholds + rules, all tunables live here
-- dashboard/ — trace viewer (OWNER: teammate 2)
-- docs/ — contract.md, trace-schema.md, threat-model.md
-- reports/ — technical report, ablations, failure analysis
-- traces/ — gitignored, generated at runtime
-
-## Current state
-- Project skeleton, GitHub repo, WSL2 Ubuntu env (uv). 206/206 starter tests pass.
-- Block 1 Status: Core Policy & Firewall Implementation Complete. `app/policy_engine.py`, `app/firewall.py`, `app/decision.py`, and `app/main.py` are live. `/v1/decision` actively evaluates policy contexts and tags observation trust ranks. 
-- 17/17 pytest suites passing locally.
-- Next Action: Pull onto desktop, verify live against `finance_false_approval` scenario, then execute Block 2 (scenario mapping across all 19 public scenarios).
+## Current state (22/09 22:30 — updated by Fedi)
+- Defense built and wired (A/B/C prompts done). 3 hotfixes landing tonight:
+  (1) confirmation_for dict tolerance + request_confirmation short-circuit,
+  (2) canary-leak rewrite on final respond via sensitivity-keyed infoflow,
+  (3) YAML calibration: benign reads allow, escalation only for consequential.
+- Verified tonight on desktop with real agent (ollama:qwen3:8b): decisions fire per
+  step, escalate reaches simulated human, canary-rewrite path implemented.
+- Sweep results (pre-fix): finance mostly OK; enterprise scenarios leak canaries via
+  final respond (8× SENSITIVE_TO_UNTRUSTED_SINK); several task failures caused by
+  request_confirmation retry loops (fix 1 kills this); ~8 SOC/finance runs interrupted
+  (Ctrl+C) — re-run after fixes before judging.
+- Baseline: 206/206 starter tests pass; our pytest suite green (3+n tests).
+- Docs: docs/contract.md is the verified contract. README, threat-model.md pending.
+- Video runs use the REAL agent: --model ollama:qwen3:8b on the desktop rig
+  (RTX 3060, WSL2). Mock model for sweeps/results tables only.
 
 ## When writing code
 - Python + FastAPI + pydantic. Tests with pytest for every module.
-- All thresholds/rules in configs/policy.yaml, never hard-coded.
-- Keep functions small and typed; this code will be read by jurors.
-- Before any non-trivial change: run `uv run pytest`, then commit.
+- Keep functions small and typed — jurors read this code.
+- Before any non-trivial change: uv run pytest, then commit.
+- progress.md is the team's shared memory — update it after every task.

@@ -6,7 +6,10 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from .schemas import DefenseRequest
+try:
+    from .schemas import DefenseRequest
+except ImportError:  # allow `python app/main.py`
+    from schemas import DefenseRequest
 
 
 class TriggeredRule(BaseModel):
