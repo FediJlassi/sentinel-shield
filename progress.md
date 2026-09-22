@@ -58,10 +58,60 @@
   Decision close-up shot: show reason codes incl. TRUST_RANK_n + explanation naming
   the rank ≤1 source required to authorize.
 
+## 22/09 23:30-23:50 — Partner track (Claude Code), Session 4
+
+- **Full public sweep run and verified** (`sentinel eval public --defense-url
+  http://127.0.0.1:8080 --model mock --json`, 40 scenarios — the public
+  library grew from the 19 originally scoped): ASR 0.0, CVR 0.0, BTU 1.0,
+  FBR 0.0 across all three domains. All three hotfixes from tonight
+  (confirmation-loop short-circuit, canary-leak rewrite, benign-read
+  calibration) confirmed holding at scale — 0 defense errors across 213
+  decisions, 0 leaked canaries (8 caught + rewritten instead). This
+  supersedes the "re-run Ctrl+C'd scenarios" TODO — full sweep completed,
+  not just the interrupted ones.
+- **New bug found (not in tonight's earlier failure list): over-broad
+  redaction.** 6/40 scenarios (all finance) now fail task_success because
+  `_observation_sensitive_strings` (`app/main.py:54-77`) sweeps every
+  string ≥8 chars out of a sensitivity-tagged observation into the
+  redaction set, not just the actual canary — so a legitimate account ID
+  or amount sitting in the same document gets redacted from the final
+  response alongside the real secret, and the task grader (which needed
+  that fact verbatim) fails. All 6 are still `attack_prevented=True` /
+  `critical_violation=False` — this is a usefulness regression from the
+  rewrite fix, not a safety gap. **Needs Fedi**: narrow that function to
+  the canary-shaped fields specifically (secret_token/account_id/
+  access_token/contract_ref per CLAUDE.md's canary list) instead of "any
+  long string." Full detail: `reports/results.md`.
+- **Doc bug found and fixed**: `docs/contract.md`'s example command
+  (`--defense-url http://127.0.0.1:8080/v1/decision`) is wrong — the CLI
+  appends `/v1/decision` itself, so the full path 404s on every step
+  (looks like `DEFENSE_UNAVAILABLE`, easy to mistake for the retry-loop bug
+  we already fixed). Corrected in `docs/contract.md`, `README.md`, and
+  `reports/video-script.md`.
+- `reports/results.md`: rewritten with the real 40-scenario table, headline
+  metrics, per-domain breakdown, and the over-redaction root-cause writeup
+  above. `reports/eval-scorecard-mock.json` is the raw scorecard.
+- `reports/technical-report.md`: Results, Ablations, and Failure Analysis
+  sections filled in with the real numbers above (no more placeholders).
+  Ablations section is honest that the `provenance_check`/`infoflow`
+  toggle comparison is still blocked on `configs/policy.yaml` (Fedi's
+  file) — used the simulator's own `allow_all` baseline on
+  `finance_false_approval` as a partial substitute ablation in the
+  meantime.
+- `docs/threat-model.md`: written (didn't exist before). Assets, adversary
+  capabilities/limitations, threat→mechanism→code mapping, and an honest
+  residual-risk section including the over-redaction finding above.
+- Root `README.md` written this session too (see git log) — repo now has
+  a real front page.
+
 ## Standing TODOs
-- Re-run Ctrl+C'd scenarios after fixes (soc_*, finance_refund_confirmed, split_settlement).
-- results.md table from mock-model sweep (19 scenarios + hard negatives).
+- **Over-redaction fix** in `_observation_sensitive_strings` (`app/main.py`)
+  — highest priority, breaks 6 real task graders. Fedi/`app/` owner.
 - Ablation toggles in configs/policy.yaml (provenance_check, infoflow) — 5 scenarios × 2.
-- REWRITE demo scenario for video (canary-redacted respond is now the candidate).
-- README + mermaid diagram, threat-model.md, technical report numbers.
+  Add as additive, default-on so current calibration doesn't shift.
+- REWRITE demo scenario for video (canary-redacted respond is now the candidate) —
+  8 real examples now exist in this session's `traces/run.jsonl` if a specific one
+  is wanted for the shot.
+- Video capture with real agent (`--model ollama:qwen3:8b`, base URL — see
+  contract.md fix above) — script/storyboard done, capture not done.
 - Defense freeze 23/09 15:00. Submit 23:00. Deadline 23:59.

@@ -91,8 +91,11 @@ Proxy Guardrail  ── policy rules + exfil/sensitivity scan     │
 uv run --no-project uvicorn app.main:app --port 8080
 ```
 Then point the simulator at it: `sentinel run --scenario <scenario.yaml>
---defense-url http://127.0.0.1:8080/v1/decision --model ollama:qwen3:8b`
-(or a mock model for scripted sweeps).
+--defense-url http://127.0.0.1:8080 --model ollama:qwen3:8b` (base URL only —
+the CLI appends `/v1/decision` itself; the full path 404s on every step and
+looks like `DEFENSE_UNAVAILABLE`). Use `--model mock` for fast scripted
+sweeps (`sentinel eval public --defense-url http://127.0.0.1:8080 --model mock
+--json`) instead of the real agent.
 
 **Tests:**
 ```bash
@@ -113,13 +116,18 @@ Open http://127.0.0.1:8501. Full details in `dashboard/README.md`.
 - `dashboard/` — read-only trace viewer.
 - `reports/` — technical report, scenario results table, video script.
 - `docs/` — shared; `contract.md` is the verified simulator contract
-  (gold source), `trace-schema.md` documents the trace JSONL shape. Pull
-  before editing.
+  (gold source), `trace-schema.md` documents the trace JSONL shape,
+  `threat-model.md` covers assets/adversary capabilities/residual risk.
+  Pull before editing.
 - `traces/` — run output (`run.jsonl`, hash-chained decision log;
   `raw-payloads.jsonl`, every raw request body for debugging).
 
 ## Status
 
-See `progress.md` for the day-by-day log and standing TODOs, and
-`reports/technical-report.md` for the full write-up (results/ablations
-sections pending the post-fix sweep re-run).
+Full 40-scenario sweep (mock model): ASR 0.0, CVR 0.0, BTU 1.0 — every
+attack neutralized, every benign scenario completes. 34/40 overall task
+success; the 6 failures are one root cause (over-broad exfiltration
+redaction stripping legitimate facts, not a security miss). See
+`reports/results.md` for the full table and `reports/technical-report.md`
+for the write-up. See `progress.md` for the day-by-day log and standing
+TODOs (ablation config toggles, video capture, over-redaction fix).

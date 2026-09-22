@@ -5,9 +5,11 @@ agent, never the mock model, exactly as specified in docs/contract.md:
 
 ```
 sentinel run --scenario finance_false_approval.yaml \
-  --defense-url http://127.0.0.1:8080/v1/decision \
+  --defense-url http://127.0.0.1:8080 \
   --model ollama:qwen3:8b
 ```
+(Base URL only — the CLI appends `/v1/decision` itself. The full path 404s on
+every step, verified 22/09 23:40; see docs/contract.md.)
 
 Record on the desktop rig (RTX 3060, WSL2) with OBS at 1080p. Start
 `uv run --no-project uvicorn app.main:app --port 8080` and `uv run
