@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional, Union
 
+import re
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+REASON_CODE_RE = re.compile(r"^[A-Z][A-Z0-9_]{1,63}$")
 ALLOWED_DECISIONS: frozenset[str] = frozenset({"allow", "block", "escalate", "rewrite"})
 
 
@@ -82,10 +84,18 @@ class DefenseDecision(BaseModel):
     decision: str
     risk_score: float = Field(ge=0.0, le=1.0)
     confidence: float = Field(ge=0.0, le=1.0)
-    reason_codes: list[str] = Field(default_factory=list)
+    reason_codes: list[str] = Field(default_factory=list, max_length=16)
     explanation: Optional[str] = None
     rewritten_action: Optional[CandidateAction] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("reason_codes")
+    @classmethod
+    def _validate_reason_codes(cls, v: list[str]) -> list[str]:
+        for code in v:
+            if not isinstance(code, str) or not REASON_CODE_RE.match(code):
+                raise ValueError(f"reason code {code!r} must be UPPER_SNAKE_CASE")
+        return v
 
     @field_validator("decision")
     @classmethod

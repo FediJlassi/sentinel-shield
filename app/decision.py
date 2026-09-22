@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Optional
 
 import yaml
 
 from .schemas import DefenseDecision, DefenseRequest
+
+_CODE_SANITIZE = re.compile(r"[^A-Z0-9_]")
+
+
+def _code_part(kind: Optional[str]) -> str:
+    """Normalize an arbitrary rule kind into UPPER_SNAKE_CASE (^[A-Z0-9_]+$)."""
+    return _CODE_SANITIZE.sub("_", (kind or "UNKNOWN").upper())
 
 RANK_NAMES: dict[int, str] = {
     0: "system_policy",
@@ -74,13 +82,13 @@ def compose(
         decision = "block"
         confidence = 0.95
         for r in critical:
-            reason_codes.append(f"RULE_CRITICAL:{r.kind}")
+            reason_codes.append(f"RULE_CRITICAL_{_code_part(r.kind)}")
         explanation_parts.append("critical policy rule triggered")
     elif (data_flow or adversary) and not is_meta:
         decision = "block"
         confidence = 0.95 if adversary else 0.9
         for r in data_flow:
-            reason_codes.append(f"DATA_FLOW:{r.kind}")
+            reason_codes.append(f"DATA_FLOW_{_code_part(r.kind)}")
         if adversary:
             reason_codes.append("ADVERSARY_CONTROL")
             explanation_parts.append("adversary-controlled content (rank 5) detected")
@@ -91,13 +99,13 @@ def compose(
         confidence = 0.9
         for r in [r for r in triggered if r in requires_conf or r in high]:
             reason_codes.append("MISSING_CONFIRMATION")
-            reason_codes.append(f"RULE_ID:{r.kind}")
+            reason_codes.append(f"RULE_{_code_part(r.kind)}")
         explanation_parts.append(
             "high-severity or unconfirmed consequential action requires escalation"
         )
     else:
         for r in triggered:
-            reason_codes.append(f"TRIGGERED:{r.kind}")
+            reason_codes.append(f"TRIGGERED_{_code_part(r.kind)}")
         if triggered:
             explanation_parts.append("lower-severity rules triggered")
         if is_meta and not critical:
