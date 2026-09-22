@@ -1,19 +1,21 @@
 from .schemas import (
     CandidateAction,
-    ConversationItem,
     DefenseDecision,
     DefenseRequest,
     HistoryDigest,
     ObservationView,
+    PolicyContext,
+    ProvenanceDetail,
     ProvenanceRecord,
 )
 
 __all__ = [
     "CandidateAction",
-    "ConversationItem",
     "DefenseDecision",
     "DefenseRequest",
     "HistoryDigest",
     "ObservationView",
+    "PolicyContext",
+    "ProvenanceDetail",
     "ProvenanceRecord",
 ]

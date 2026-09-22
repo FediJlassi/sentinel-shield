@@ -16,7 +16,7 @@ VALID_BODY = {
     "run_id": "r1",
     "step_id": 0,
     "user_goal": "send the report",
-    "candidate_action": {"tool_name": "send_email", "arguments": {"to": "a@b.c"}},
+    "candidate_action": {"type": "tool_call", "tool": "send_email", "arguments": {"to": "a@b.c"}},
 }
 
 
@@ -68,6 +68,6 @@ def test_rewritten_action_forbidden_for_allow():
             confidence=1.0,
             reason_codes=["X"],
             explanation="e",
-            rewritten_action=CandidateAction(tool_name="send_email", arguments={}),
+            rewritten_action=CandidateAction(tool="send_email", arguments={}),
             metadata={},
         )

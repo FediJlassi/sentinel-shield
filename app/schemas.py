@@ -7,39 +7,73 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 ALLOWED_DECISIONS: frozenset[str] = frozenset({"allow", "block", "escalate", "rewrite"})
 
 
-class ConversationItem(BaseModel):
-    role: str
-    content: str
+class CandidateAction(BaseModel):
+    model_config = {"extra": "allow"}
+    type: str = ""
+    tool: Optional[str] = None
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    content: Optional[str] = None
+    final: bool = False
+    confirmation_for: Optional[str] = None
+
+
+class ProvenanceDetail(BaseModel):
+    model_config = {"extra": "allow"}
+    source_type: Optional[str] = None
+    source_id: Optional[str] = None
+    trust_level: Optional[int] = None
+    origin_actor: Optional[str] = None
+    retrieved_via: Optional[str] = None
+    sensitivity: Optional[str] = None
+    timestamp: Optional[str] = None
+    parent_event_ids: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
 
 
 class ProvenanceRecord(BaseModel):
-    source: str
-    trust_level: int
-    detail: Optional[str] = None
+    model_config = {"extra": "allow"}
+    id: str = ""
+    provenance: ProvenanceDetail = Field(default_factory=ProvenanceDetail)
 
 
 class ObservationView(BaseModel):
-    raw: dict[str, Any] = Field(default_factory=dict)
+    model_config = {"extra": "allow"}
+    kind: Optional[str] = None
+    content: Optional[str] = None
+    provenance_ids: list[str] = Field(default_factory=list)
 
 
-class CandidateAction(BaseModel):
-    tool_name: str
-    arguments: dict[str, Any] = Field(default_factory=dict)
+class PolicyContext(BaseModel):
+    model_config = {"extra": "allow"}
+    policy_id: Optional[str] = None
+    policy_version: Optional[str] = None
+    allowed_tools: list[str] = Field(default_factory=list)
+    confirmation_required_tools: list[str] = Field(default_factory=list)
+    consequential_tools: list[str] = Field(default_factory=list)
+    rules: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class HistoryDigest(BaseModel):
-    summary: str = ""
-    items: list[dict[str, Any]] = Field(default_factory=list)
+    model_config = {"extra": "allow"}
+    steps_taken: Optional[int] = None
+    turn_index: Optional[int] = None
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    confirmations_granted: list[Any] = Field(default_factory=list)
+    blocked_count: int = 0
+    escalated_count: int = 0
+    least_trusted_seen: Optional[Any] = None
+    most_sensitive_seen: Optional[Any] = None
 
 
 class DefenseRequest(BaseModel):
-    run_id: str
-    step_id: int
-    user_goal: str
-    conversation: list[ConversationItem] = Field(default_factory=list)
+    model_config = {"extra": "allow"}
+    run_id: str = ""
+    step_id: int = 0
+    user_goal: str = ""
+    conversation: list[dict[str, Any]] = Field(default_factory=list)
     observation: Optional[ObservationView] = None
-    candidate_action: CandidateAction
-    policy_context: dict[str, Any] = Field(default_factory=dict)
+    candidate_action: CandidateAction = Field(default_factory=CandidateAction)
+    policy_context: PolicyContext = Field(default_factory=PolicyContext)
     provenance: list[ProvenanceRecord] = Field(default_factory=list)
     history_digest: HistoryDigest = Field(default_factory=HistoryDigest)
 
