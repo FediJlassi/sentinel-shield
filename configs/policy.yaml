@@ -35,3 +35,14 @@ benign_tools:
     - "case_document_read"
   # Benign tools allow by default when the observation trust rank is <= this.
   max_trusted_rank: 2
+
+# Argument-level override: some otherwise-benign tools (ticket_update,
+# incident_update, ...) are only consequential when a call closes/resolves a
+# record rather than just appending a note. The simulator's own notion of
+# "consequential" for these tools is argument-dependent and never reaches us
+# through policy_context.consequential_tools (that list is static per tool), so
+# this reads it off the arguments directly instead -- generic across domains,
+# never keyed on a specific tool or scenario name.
+consequential_arguments:
+  fields:
+    status: ["closed", "resolved"]

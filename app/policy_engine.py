@@ -79,6 +79,23 @@ def _is_benign_tool(tool: object, config: dict) -> bool:
     return any(tool.endswith(s) for s in suffixes)
 
 
+def _has_consequential_argument(candidate, config: dict) -> bool:
+    """Some tools (ticket_update, incident_update, ...) are benign for a plain
+    note but consequential when they close/resolve a record -- the simulator's
+    own ToolInfo.is_consequential() is argument-dependent, but defense_context()
+    only ever exposes a static per-tool consequential_tools list, so that
+    distinction never reaches us there. Read it off the arguments directly
+    instead, generically, via configs/policy.yaml (never a specific tool name).
+    """
+    fields = config.get("consequential_arguments", {}).get("fields", {}) or {}
+    args = candidate.arguments if isinstance(candidate.arguments, dict) else {}
+    for key, values in fields.items():
+        value = args.get(key)
+        if isinstance(value, str) and value.lower() in {str(v).lower() for v in values}:
+            return True
+    return False
+
+
 def evaluate(request: DefenseRequest, config: Optional[dict] = None) -> list[TriggeredRule]:
     if config is None:
         config = load_config()
@@ -96,37 +113,44 @@ def evaluate(request: DefenseRequest, config: Optional[dict] = None) -> list[Tri
     for rule in pc.rules:
         kind = rule.get("kind")
         severity = rule.get("severity")
-        rule_tool = rule.get("tool")
         detail: Optional[str] = None
         triggered = False
 
+        # NOTE: the real simulator's defense_context() only ever sends
+        # {id, kind, severity, description} for every rule -- it never scopes a
+        # rule to one tool name or carries prerequisite pairs (verified against
+        # captured traces/raw-payloads.jsonl for enterprise_standard/
+        # finance_standard/soc_standard). Rules are blanket, per-kind directives
+        # that apply to whichever tool the agent is calling right now; matching
+        # on a `rule.get("tool")` that never arrives silently disables the rule.
+
         if kind == "tool_permission":
-            # Scope to the candidate tool named by the rule; respond actions (no tool)
-            # never emit RULE_TOOL_PERMISSION, and benign non-destructive tools are
-            # allowed by default.
-            if (
-                candidate_tool is not None
-                and candidate_tool == rule_tool
-                and not _is_benign_tool(candidate_tool, config)
-                and candidate_tool not in pc.allowed_tools
-            ):
+            # allowed_tools is the simulator's own hard boundary -- never bypassed
+            # by the "benign tool" heuristic below, which only governs whether a
+            # permitted tool still needs confirmation.
+            if candidate_tool is not None and candidate_tool not in pc.allowed_tools:
                 triggered = True
                 detail = f"tool {candidate_tool!r} is not in allowed_tools"
 
         elif kind == "requires_confirmation":
-            # Only applies to the candidate tool named by the rule.
-            if candidate_tool is not None and candidate_tool == rule_tool:
-                needs_confirm = is_consequential(request, candidate_tool) or requires_confirmation(
-                    request, candidate_tool
+            if candidate_tool is not None:
+                closing = _has_consequential_argument(candidate, config)
+                needs_confirm = (
+                    is_consequential(request, candidate_tool)
+                    or requires_confirmation(request, candidate_tool)
+                    or closing
                 )
                 if needs_confirm and digest not in hd.confirmations_granted:
                     # Consult the YAML benign classification: non-destructive tools
                     # (reads / note-append / comment) are allowed by default, especially
                     # when the observation trust rank <= 2. Only state-changing money-moving
-                    # tools (payment_execute, wire_transfer, ...) escalate.
+                    # tools (payment_execute, wire_transfer, ...) escalate. A closing/resolving
+                    # argument always escalates even for an otherwise-benign tool name.
                     obs_rank = observation_rank(request)
-                    if _is_benign_tool(candidate_tool, config) and (
-                        obs_rank is None or obs_rank <= max_trusted_rank
+                    if (
+                        not closing
+                        and _is_benign_tool(candidate_tool, config)
+                        and (obs_rank is None or obs_rank <= max_trusted_rank)
                     ):
                         triggered = False
                         detail = f"tool {candidate_tool!r} is a benign non-destructive action; allowed without confirmation"
@@ -138,13 +162,23 @@ def evaluate(request: DefenseRequest, config: Optional[dict] = None) -> list[Tri
                         )
 
         elif kind == "prerequisite":
-            tool = rule.get("tool")
-            predecessor = rule.get("requires") or rule.get("prerequisite")
-            if tool == candidate.tool and predecessor is not None:
-                seen = any(tc.get("tool") == predecessor for tc in hd.tool_calls)
-                if not seen:
-                    triggered = True
-                    detail = f"tool {tool!r} requires predecessor {predecessor!r} before use"
+            # Inferred generically from the candidate tool's own "<prefix>_execute"
+            # naming convention plus this policy's own allowed_tools -- covers
+            # payment_prepare->payment_confirm->payment_execute and
+            # remediation_prepare->remediation_execute alike without hard-coding
+            # either domain.
+            if isinstance(candidate_tool, str) and candidate_tool.endswith("_execute"):
+                prefix = candidate_tool[: -len("_execute")]
+                predecessor = None
+                for suffix in ("_confirm", "_prepare"):
+                    if f"{prefix}{suffix}" in pc.allowed_tools:
+                        predecessor = f"{prefix}{suffix}"
+                        break
+                if predecessor is not None:
+                    seen = any(tc.get("tool") == predecessor for tc in hd.tool_calls)
+                    if not seen:
+                        triggered = True
+                        detail = f"tool {candidate_tool!r} requires predecessor {predecessor!r} before use"
 
         elif kind in ("data_flow", "forbidden_effect"):
             # Stub evaluators: carry through un-triggered until implemented.
