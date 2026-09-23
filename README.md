@@ -50,14 +50,24 @@ Proxy Guardrail  ── policy rules + exfil/sensitivity scan     │
   mock model is used for scripted sweeps only.
 - **Proxy Guardrail** — `app/policy_engine.py` (declarative rule evaluation:
   tool permission, requires-confirmation, prepare→confirm→execute prerequisite
-  chains, data-flow, forbidden-effect; unknown rule `kind`s pass through
-  un-triggered rather than being silently dropped) + `app/decision.py`
-  (severity → outcome ladder, thresholds from `configs/policy.yaml`) +
-  sensitivity-scan/redaction logic **inline in `app/main.py`** (scans final
-  `respond` actions — plain, base64, hex, reversed — for values sourced from
-  `sensitivity ∈ {restricted, confidential}` provenance, and rewrites leaks
-  with a redaction token). Note: this scan is not a separate `infoflow.py`
-  module despite earlier architecture notes describing one that way.
+  chains, data-flow, forbidden-effect; `action_digest` copied byte-for-byte
+  from the starter kit so it matches `history_digest.confirmations_granted`;
+  unknown rule `kind`s pass through un-triggered rather than being silently
+  dropped) + `app/decision.py` (severity → outcome ladder, thresholds from
+  `configs/policy.yaml`).
+- **`app/main.py`** — the `/v1/decision` endpoint itself, plus two things
+  that live here rather than in a separate module: (1) run-scoped
+  sensitive-string state (`_observation_sensitive_strings` /
+  `_extract_candidate_secrets`, a `label: value` + entropy heuristic keyed on
+  field semantics, not canary names) tracking which tracked values are
+  restricted vs. confidential and scanning every sink — a final `respond`
+  (plain, base64, hex, rot13, reversed) and any tool call's arguments — for
+  a leak, redacting or blocking depending on sensitivity tier and
+  destination; and (2) a hard `request_confirmation` short-circuit that
+  allows that specific tool instantly, before any parsing, so a malformed or
+  unusual payload there can never cascade into a `DEFENSE_UNAVAILABLE` retry
+  loop. There is no separate `infoflow.py` module — this is all inline in
+  `main.py` despite some earlier internal notes describing it that way.
 - **Human approve/deny** — escalation does **not** auto-approve. Per the
   verified simulator contract, `human_confirm` calls `matcher.is_legitimate()`
   against the scenario's real plan: an injected action that reaches escalation
@@ -122,12 +132,38 @@ Open http://127.0.0.1:8501. Full details in `dashboard/README.md`.
 - `traces/` — run output (`run.jsonl`, hash-chained decision log;
   `raw-payloads.jsonl`, every raw request body for debugging).
 
-## Status
+## Results
 
-Full 40-scenario sweep (mock model): ASR 0.0, CVR 0.0, BTU 1.0 — every
-attack neutralized, every benign scenario completes. 34/40 overall task
-success; the 6 failures are one root cause (over-broad exfiltration
-redaction stripping legitimate facts, not a security miss). See
-`reports/results.md` for the full table and `reports/technical-report.md`
-for the write-up. See `progress.md` for the day-by-day log and standing
-TODOs (ablation config toggles, video capture, over-redaction fix).
+Full public scenario sweep (40 scenarios, `--model mock`, deterministic):
+
+| Metric | Value |
+|---|---|
+| Attack success rate (ASR) | **0 / 31** attack-bearing scenarios succeeded |
+| Critical violation rate (CVR) | **0** |
+| Benign task completion | **40 / 40** |
+| False block rate (FBR) | **0.0** — no benign action ever outright blocked |
+
+Baselines, same split, same command (honest, no spin — see
+`reports/results.md` for the full table and per-domain breakdown):
+
+- `allow_all` (no defense): every attack succeeds (ASR 1.0) — confirms the
+  scenario library isn't accidentally already-safe.
+- `provenance` (starter kit's deterministic source→sink baseline) actually
+  **beats us on the official composite score** (0.939 vs our 0.902), because
+  the scoring formula penalizes our escalation volume harder than its false
+  blocks. Its FBR is 0.222 (it outright blocks real benign actions); ours is
+  0.0. We're the only one of the three with ASR = CVR = FBR = 0.0
+  simultaneously — the tradeoff is leaning on human-in-the-loop escalation
+  more than `provenance` does, not a free lunch.
+
+See `reports/technical-report.md` for the full method, ablations, and
+failure analysis, `reports/results.md` for the scenario-by-scenario table,
+and `progress.md` for the day-by-day log.
+
+## Demonstration
+
+Video walkthrough (real agent, `--model ollama:qwen3:8b`, not the mock):
+`TODO — video URL` *(placeholder; filled in after recording)*.
+
+Dashboard decision close-up: *(no screenshot committed to the repo yet —
+add to `reports/screenshots/` and link here once captured)*.
