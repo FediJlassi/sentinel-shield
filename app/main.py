@@ -56,6 +56,7 @@ def _observation_sensitive_strings(observation, provenance_map) -> list[str]:
         return []
     pids = _d(observation, "provenance_ids") or []
     sensitive = False
+    untrusted = False
     for pid in pids:
         rec = provenance_map.get(pid)
         if rec is None:
@@ -64,8 +65,18 @@ def _observation_sensitive_strings(observation, provenance_map) -> list[str]:
         prov = prov if isinstance(prov, dict) else getattr(prov, "__dict__", {})
         if (prov.get("sensitivity") or "").lower() in SENSITIVE_SENSITIVITIES:
             sensitive = True
-            break
-    if not sensitive:
+        # Only track content for redaction when it originates from an untrusted
+        # source (trust rank >= 3: untrusted_internal / untrusted_external /
+        # adversary_controlled). Internal/authoritative sources (system_policy=0,
+        # authenticated_user=1, trusted_internal=2) are the user's own data and must
+        # not be stripped from their response.
+        rank = prov.get("trust_level")
+        if isinstance(rank, str):
+            rank = {"system_policy": 0, "authenticated_user": 1, "trusted_internal": 2,
+                    "untrusted_internal": 3, "untrusted_external": 4, "adversary_controlled": 5}.get(rank, 5)
+        if isinstance(rank, int) and rank >= 3:
+            untrusted = True
+    if not (sensitive and untrusted):
         return []
     content = _d(observation, "content")
     if not isinstance(content, str):

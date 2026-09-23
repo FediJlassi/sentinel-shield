@@ -68,6 +68,17 @@ def is_consequential(request: DefenseRequest, tool: str) -> bool:
     return tool in request.policy_context.consequential_tools
 
 
+def _is_benign_tool(tool: object, config: dict) -> bool:
+    if not isinstance(tool, str):
+        return False
+    benign = config.get("benign_tools", {}) or {}
+    suffixes = benign.get("suffixes", []) or []
+    tools = set(benign.get("tools", []) or [])
+    if tool in tools:
+        return True
+    return any(tool.endswith(s) for s in suffixes)
+
+
 def evaluate(request: DefenseRequest, config: Optional[dict] = None) -> list[TriggeredRule]:
     if config is None:
         config = load_config()
@@ -76,44 +87,55 @@ def evaluate(request: DefenseRequest, config: Optional[dict] = None) -> list[Tri
     candidate = request.candidate_action
     digest = action_digest(candidate)
 
-    benign_suffixes = (
-        config.get("benign_reads", {}).get("suffixes", []) or ["_read", "_search", "_lookup", "_summary"]
-    )
-    max_trusted_rank = config.get("benign_reads", {}).get("max_trusted_rank", 2)
+    max_trusted_rank = config.get("benign_tools", {}).get("max_trusted_rank", 2)
 
     results: list[TriggeredRule] = []
+
+    candidate_tool = candidate.tool
 
     for rule in pc.rules:
         kind = rule.get("kind")
         severity = rule.get("severity")
+        rule_tool = rule.get("tool")
         detail: Optional[str] = None
         triggered = False
 
         if kind == "tool_permission":
-            tool = rule.get("tool")
-            # Respond actions have no tool; never emit RULE_TOOL_PERMISSION for them.
-            if request.candidate_action.tool is not None and tool not in pc.allowed_tools:
+            # Scope to the candidate tool named by the rule; respond actions (no tool)
+            # never emit RULE_TOOL_PERMISSION, and benign non-destructive tools are
+            # allowed by default.
+            if (
+                candidate_tool is not None
+                and candidate_tool == rule_tool
+                and not _is_benign_tool(candidate_tool, config)
+                and candidate_tool not in pc.allowed_tools
+            ):
                 triggered = True
-                detail = f"tool {tool!r} is not in allowed_tools"
+                detail = f"tool {candidate_tool!r} is not in allowed_tools"
 
         elif kind == "requires_confirmation":
-            tool = rule.get("tool")
-            needs_confirm = is_consequential(request, tool) or requires_confirmation(request, tool)
-            if needs_confirm and digest not in hd.confirmations_granted:
-                # Consult the YAML benign classification: reads are not state-changing,
-                # so MISSING_CONFIRMATION only escalates for state-changing tools, and
-                # benign reads allow by default when the observation trust rank <= 2.
-                is_benign_read = isinstance(tool, str) and tool.endswith(tuple(benign_suffixes))
-                obs_rank = observation_rank(request)
-                if is_benign_read and (obs_rank is None or obs_rank <= max_trusted_rank):
-                    triggered = False
-                    detail = f"tool {tool!r} is a benign read; allowed without confirmation"
-                else:
-                    triggered = True
-                    detail = (
-                        f"tool {tool!r} requires confirmation but digest {digest} "
-                        f"is not in confirmations_granted"
-                    )
+            # Only applies to the candidate tool named by the rule.
+            if candidate_tool is not None and candidate_tool == rule_tool:
+                needs_confirm = is_consequential(request, candidate_tool) or requires_confirmation(
+                    request, candidate_tool
+                )
+                if needs_confirm and digest not in hd.confirmations_granted:
+                    # Consult the YAML benign classification: non-destructive tools
+                    # (reads / note-append / comment) are allowed by default, especially
+                    # when the observation trust rank <= 2. Only state-changing money-moving
+                    # tools (payment_execute, wire_transfer, ...) escalate.
+                    obs_rank = observation_rank(request)
+                    if _is_benign_tool(candidate_tool, config) and (
+                        obs_rank is None or obs_rank <= max_trusted_rank
+                    ):
+                        triggered = False
+                        detail = f"tool {candidate_tool!r} is a benign non-destructive action; allowed without confirmation"
+                    else:
+                        triggered = True
+                        detail = (
+                            f"tool {candidate_tool!r} requires confirmation but digest {digest} "
+                            f"is not in confirmations_granted"
+                        )
 
         elif kind == "prerequisite":
             tool = rule.get("tool")

@@ -222,3 +222,56 @@ def test_respond_skips_tool_permission(client):
     resp = client.post("/v1/decision", json=body)
     assert resp.status_code == 200
     assert "RULE_TOOL_PERMISSION" not in resp.json()["reason_codes"]
+
+
+def test_benign_finance_write_allows(client):
+    # A non-destructive finance write (case_note_create) listed in
+    # confirmation_required_tools must NOT escalate / block.
+    body = {
+        "run_id": "fin-benign-1",
+        "step_id": 3,
+        "user_goal": "add case note",
+        "candidate_action": {"type": "tool_call", "tool": "case_note_create", "arguments": {"text": "verified"}},
+        "policy_context": {
+            "allowed_tools": ["case_note_create", "account_summary"],
+            "consequential_tools": ["wire_transfer"],
+            "confirmation_required_tools": ["case_note_create", "wire_transfer"],
+            "rules": [{"kind": "requires_confirmation", "tool": "case_note_create", "severity": "high"}],
+        },
+        "history_digest": {"confirmations_granted": []},
+        "provenance": [{"id": "prov-1", "provenance": {"trust_level": 1, "sensitivity": "internal"}}],
+        "observation": {"kind": "doc", "content": "ok", "provenance_ids": ["prov-1"]},
+    }
+    resp = client.post("/v1/decision", json=body)
+    assert resp.status_code == 200
+    d = resp.json()
+    assert d["decision"] == "allow"
+    assert "MISSING_CONFIRMATION" not in d["reason_codes"]
+    assert "RULE_TOOL_PERMISSION" not in d["reason_codes"]
+
+
+def test_redaction_skips_authenticated_user_source(client):
+    # Content from the authenticated user (trust rank 1) must NOT be redacted
+    # from the user's own response — only untrusted (>=3) sources are stripped.
+    run_id = "sens-auth-1"
+    obs_body = {
+        "run_id": run_id,
+        "step_id": 0,
+        "user_goal": "research",
+        "observation": {
+            "kind": "doc",
+            "content": '{"note": "' + CANARY + '"}',
+            "provenance_ids": ["prov-auth"],
+        },
+        "candidate_action": {"type": "tool_call", "tool": "read_file", "arguments": {}},
+        "provenance": [
+            {"id": "prov-auth", "provenance": {"trust_level": 1, "sensitivity": "restricted"}},
+        ],
+        "policy_context": {"allowed_tools": ["read_file"], "rules": []},
+    }
+    assert client.post("/v1/decision", json=obs_body).status_code == 200
+    resp = client.post("/v1/decision", json=_respond_step(run_id, f"Your account {CANARY} is ready."))
+    assert resp.status_code == 200
+    d = resp.json()
+    assert d["decision"] == "allow"
+    assert "SENSITIVE_TO_USER_SINK" not in d["reason_codes"]
