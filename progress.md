@@ -278,5 +278,28 @@ before/after. Nothing else changed on this branch besides
   (sanity check only, no app code touched).
 - **Task 5 (merge-prep note for Fedi) done** — see the dedicated section
   above (regex/entropy/canary-grep summary for the 13:00 review).
-- **Task 2 (rehearsal) and task 3 (report screenshots) not started yet** —
-  in progress next.
+- **Task 2 (rehearsal) partially done.** Cannot operate OBS or rehearse
+  narration audio from this session — that's a physical action at the rig.
+  Did the data-driven part: started the live defense (port 8080) and
+  dashboard (port 8501) and ran a fresh full public sweep against them
+  (`traces/run.jsonl`, 213 real events, `--model mock`) to check the
+  rewrite-shot risk flagged in the partner's message. Confirmed: all 8
+  `ent_*` scenarios escalate 4x then `allow`, **never `rewrite`**, under
+  the mock model — mirrors the `partner/redaction-fix` branch's own
+  finding. Added Plan A (rewrite fires) / Plan B (escalate-deny, expected
+  default) storyboard guidance to `reports/video-script.md` so nothing
+  gets improvised at 15:00. Fixed two stale `§N` cross-references in
+  `docs/threat-model.md` left over from the Task 1 renumbering while in
+  there.
+- **Task 3 (report screenshots) blocked on a sandbox limitation, handed
+  to the user.** This session has no headless browser and no network path
+  to download one (Playwright's Chromium download stalled at 0 bytes for
+  10+ minutes, killed it; no system `chromium`/`google-chrome` binary
+  either) — screenshotting the dashboard from here would mean fabricating
+  an image, which the report explicitly claims not to do. Both servers
+  are still running live on this machine (`http://localhost:8501`) with
+  the fresh sweep loaded; asked the user to grab 2 screenshots themselves
+  (sweep summary; the `finance_false_approval` `payment_confirm`/escalate/
+  `TRUST_RANK_4` row expanded, matching the video's Shot 3 narrative) into
+  `reports/screenshots/` — not done yet as of this entry. Embed into
+  `reports/technical-report.md` once they land.
