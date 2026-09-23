@@ -108,10 +108,39 @@ Reason: our computed digests must byte-match what the simulator records in
 history_digest.confirmations_granted. Any reimplementation risks silent mismatch.
 Read their app/models.py first — our schemas mirror it.
 
-## [TODO] still open (re-scoped)
-- Does the SIMULATOR validate rewritten_action structure? (grep starter kit;
-  our own schemas enforce mandatory-iff-rewrite regardless)
-- Exact `kind` strings in policy_context.rules across scenario YAMLs — grep
-  `grep -rh "kind:" scenarios/ | sort | uniq -c` before Prompt C
-- `candidate_action.confirmation_for` exact format — read from a captured
-  escalate payload in traces/raw-payloads.jsonl if present
+## [TODO] — closed out (23/09, final submission pass)
+
+- ✓ **Escalate semantics** — verified against simulator source
+  (`human_confirm` → `matcher.is_legitimate()`); see "ESCALATE semantics"
+  above.
+- ✓ **Rule `kind` strings in `policy_context.rules`** — confirmed via
+  captured real payloads (`traces/raw-payloads.jsonl`) plus reading
+  `sentinel/core/policies.py` directly: `tool_permission`,
+  `requires_confirmation`, `prerequisite`, `data_flow`, `forbidden_effect`
+  across `enterprise_standard`/`finance_standard`/`soc_standard`. The
+  original TODO's suggested approach (grep scenario YAMLs) was the wrong
+  place to look — these come from the simulator's own policy profiles, not
+  scenario files. More important finding than the list itself: **every
+  rule is serialized as only `{id, kind, severity, description}` — never a
+  per-rule `tool` field.** Our `policy_engine.py` originally required
+  `candidate_action.tool == rule["tool"]` before `tool_permission`/
+  `requires_confirmation`/`prerequisite` could trigger at all, which made
+  all three structurally dead against real traffic (rule["tool"] is always
+  `None`, so the comparison can never be true). Fixed in commit `19c195e` —
+  see `progress.md`'s 23/09 entries for the full story; this was the
+  session's most severe bug, caught via a real 49-scenario sweep, not the
+  mock model or our own unit tests (which had fabricated a `"tool"` key on
+  the rule dict that real traffic never sends).
+- ✓ **`rewritten_action` validation** — the simulator DOES validate it
+  (`Agent._valid_rewrite` in `sentinel/agent/reference.py`): a rewrite may
+  not flip `final` from `false` to `true`, and if the rewritten type is
+  `tool_call`, its `tool` must exist in the tool registry — otherwise the
+  rewrite is silently discarded and the *original* (unrewritten) action
+  proceeds instead. Our own rewrites (`scan_exfil` in `app/main.py`) only
+  ever change `content` on an already-final `respond`, so both conditions
+  are always satisfied. Our schemas separately enforce mandatory-iff-rewrite
+  regardless, as before.
+- ✓ **`candidate_action.confirmation_for` format** — confirmed: string,
+  `null`, or a nested dict (the simulator sends a copy of the confirmed
+  action); our schemas tolerate all three, dicts coerced to `None`. See
+  "Verified additions" at the top of this file.
