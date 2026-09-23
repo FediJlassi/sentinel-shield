@@ -1,7 +1,7 @@
 name: sentinel-shield
 kind: defense
 api_version: v1
-team: TODO-team-name          # placeholder — fill in before submission, Fedi/team to confirm
+team: bara3em
 port: 8080
 models: []          # no external pretrained model inside the defense itself (rule-based
                     # policy engine); Qwen3-8B is the organizer-supplied agent under test,
