@@ -95,13 +95,62 @@ the image at least once before 23:00** (`docker build -t sentinel-shield .`
 then hit `POST /v1/decision` inside the container) — this has not been
 done yet.
 
-## Still open before 23:00
+## Final validation run (23/09, final submission pass, team name `bara3em`)
 
-1. Fill in `team:` in `sentinel-submission.yaml` (currently a `TODO`
-   placeholder — team member names/handle not available to fill in from
-   this session).
+Command (from `sentinel-starter-kit/`):
+
+```bash
+uv run sentinel submission validate /home/ghass/sentinel-shield/sentinel-shield
+```
+
+Output:
+
+```
+pass non_root_user: USER 10001:10001
+pass dockerfile_privileges:
+pass manifest: sentinel-shield: 0 model(s), 0 dataset(s)
+pass no_secrets:
+pass no_escaping_symlinks:
+pass file_sizes:
+submission valid
+```
+
+All 6 checks pass. `team:` in `sentinel-submission.yaml` is now `bara3em`
+(the manifest schema, `SubmissionManifest` in the starter kit, uses
+`extra="forbid"` and has no member-names/handles field, so team name is the
+only thing fillable there).
+
+## Docker build — untested, Fedi builds on rig
+
+`docker` is not installed in this WSL2 shell at all (not just an
+unreachable daemon — the CLI itself: `docker --version` →
+"The command 'docker' could not be found in this WSL 2 distro"). Could not
+run `docker build -t sentinel-shield .` from this session. The static
+`dockerfile_privileges`/`non_root_user` checks above pass (they lint the
+Dockerfile's contents, not build it), but that doesn't guarantee the image
+actually builds — **needs a real `docker build` + a smoke-test `POST
+/v1/decision` inside the container before submitting.**
+
+## PDF export — untested, no tool available
+
+`pandoc` is not installed (`pandoc: command not found`), and no fallback
+(`weasyprint`, `wkhtmltopdf`) is available either — checked and confirmed
+absent, did not install anything given the code/environment freeze.
+`reports/technical-report.pdf` was **not created**. `reports/technical-report.md`
+remains the only committed form. Per the earlier open item below, whether a
+PDF is actually required is still unconfirmed against the real submission
+instructions (not available from this repo or the starter kit docs).
+
+## Still open before submission
+
+1. ~~Fill in `team:` in `sentinel-submission.yaml`~~ — done, `bara3em`.
 2. Confirm accepted report format (Markdown vs. PDF) against the actual
    submission instructions.
-3. Build-test the Docker image at least once.
-4. Video capture, filename, and final duration.
-5. Final commit hash, recorded last, after all freeze-window merges land.
+3. Build-test the Docker image at least once (untested from this session,
+   see above).
+4. Export `reports/technical-report.md` to PDF if the submission format
+   requires it (no tool available in this session, see above).
+5. Video capture, filename, and final duration.
+6. Final commit hash, recorded last, after all freeze-window merges land —
+   see `progress.md`'s FINAL STATE entry for the current one at time of
+   writing.
