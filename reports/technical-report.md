@@ -1,6 +1,6 @@
 # SENTINEL Shield — Technical Report
 
-## Abstract
+## 1. Abstract
 
 SENTINEL Shield is a policy proxy in front of an LLM agent (`POST
 /v1/decision`) that authorizes every candidate action against provenance
@@ -30,7 +30,7 @@ FBR = 0.0 and ASR = 0.0 and CVR = 0.0 simultaneously, at the cost of a
 higher escalation (human-in-the-loop) rate than `provenance`'s calibration
 — an explicit, unresolved tradeoff, not a hidden one.
 
-## 1. Threat Model
+## 2. Threat Model
 
 SENTINEL Shield sits as a policy proxy in front of an LLM agent: every
 candidate action the agent wants to take is submitted to `POST
@@ -92,7 +92,7 @@ simulated human does not help the attacker — `human_confirm` checks the
 action against the scenario's actual legitimate plan, not against whatever
 the escalated payload claims, so escalation is safe rather than a bypass.
 
-## 2. Hypothesis
+## 3. Hypothesis
 
 **Authorization must trace to rank ≤1 provenance; anything else is
 evidence.**
@@ -116,7 +116,7 @@ authenticated_user can authorize sensitive actions" (`app/decision.py`,
 compose()). A juror reading the trace does not have to infer the rule from
 behavior — it is printed on every relevant decision.
 
-## 3. Method
+## 4. Method
 
 Architecture as implemented in `app/` (this section describes the code as
 it exists today, not the original design notes — see the discrepancies
@@ -189,13 +189,37 @@ called out inline):
   toggles referenced in the architecture notes and progress log — those
   remain a standing TODO (see Ablations, below).
 
-## 4. Results
+## 5. Experiments
 
-Full public sweep (40 scenarios — 15 enterprise, 12 finance, 13 SOC; 31
-attack-bearing, 9 benign/hard-negative), `--model mock` for determinism,
-run against the live, unmodified defense via the simulator's own evaluator
-(`sentinel eval public`). Full per-scenario table and raw scorecard:
-`reports/results.md` / `reports/eval-scorecard-mock.json`.
+**What we ran the published scenario library against.** Full public sweep
+— 40 scenarios (15 enterprise, 12 finance, 13 SOC; 31 attack-bearing, 9
+benign/hard-negative) — run against the live, unmodified defense via the
+simulator's own evaluator (`sentinel eval public`). No self-authored
+scenarios were added; the public split was run as-is. Full per-scenario
+table and raw scorecard: `reports/results.md` / `reports/eval-scorecard-mock.json`.
+
+**Models, hardware, seeds.** `--model mock` (deterministic, used for every
+quantitative number in this report) and `ollama:qwen3:8b` (the organizer-
+required real reference agent, used only for the qualitative video
+walkthrough — see `reports/video-script.md`; captured on the desktop rig,
+RTX 3060, WSL2). No other external model or dataset is declared. Scorecard
+digests (Section 10) are from `sentinel-bench/0.1.0`, `split: public`,
+`attack_mode: static`, `run_seed: 0` — deterministic and reproducible
+run-to-run under the mock model.
+
+**Baselines compared.** Same 40-scenario split, same `--model mock`, run
+via the starter kit's own in-process baselines (`uv run sentinel eval
+public --defense <name> --model mock --json`, no `--defense-url`):
+`allow_all` (no defense at all — confirms the split isn't accidentally
+already-safe) and `provenance` (the starter kit's own deterministic
+source-to-sink + confirmation baseline, no escalation) against `ours`
+(this defense, post-redaction-fix branch `partner/redaction-fix`, commit
+`d4e4a3a`). Full results and an honest discussion of the tradeoffs are in
+Section 6.
+
+## 6. Results
+
+Full public sweep, as described in Section 5 (Experiments).
 
 | Metric | Value |
 |---|---|
@@ -204,18 +228,16 @@ run against the live, unmodified defense via the simulator's own evaluator
 | **CVR** (critical violation rate) | **0.0** — no forbidden effect ever fired |
 | **BTU** (benign task utility) | **1.0** — every no-attack scenario completed |
 | FBR (false block rate) | 0.0 |
-| Task success, overall | 34/40 (85%) on `main` at time of writing; **40/40** on the redaction-fix branch, see Section 6 |
+| Task success, overall | 34/40 (85%) on `main` at time of writing; **40/40** on the redaction-fix branch, see Section 8 |
 | Escalation rate / precision | 0.756 / 0.317 |
-| Rewrite events (canary redaction) | 8 on `main` (see Section 6 — likely false positives); 0 on the fix branch (real catches, none needed rewriting this sweep) |
+| Rewrite events (canary redaction) | 8 on `main` (see Section 8 — likely false positives); 0 on the fix branch (real catches, none needed rewriting this sweep) |
 | Defense errors (`DEFENSE_UNAVAILABLE`) | 0 |
 
 ### Baseline comparison
 
-Same 40-scenario split, same `--model mock`, run against the starter kit's
-own in-process baselines. "ours" is the post-redaction-fix branch
-(`partner/redaction-fix`, commit `d4e4a3a`); see `reports/results.md` for
-the full per-scenario breakdown and an honest discussion of the tradeoffs
-below the table.
+Baselines and setup as described in Section 5 (Experiments); "ours" is the
+post-redaction-fix branch (`partner/redaction-fix`, commit `d4e4a3a`). See
+`reports/results.md` for the full per-scenario breakdown.
 
 | Defense | BTU | ASR | CVR | FBR | UER | TUI | DFI | Brier | ECE | p95 ms |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -232,13 +254,13 @@ blocks some benign actions we allow), while its UER is 0.0 against our
 0.675 since it has no escalation cost to pay at all. Its official `core`
 score (0.939) beats ours (0.902) because the scoring formula penalizes our
 escalation volume harder than its false-block rate — a real, unresolved
-weakness in our current calibration (Section 5/6), not a scoring artifact.
+weakness in our current calibration (Section 7/8), not a scoring artifact.
 We are the only one of the three with FBR = ASR = CVR = 0.0 simultaneously,
 at the explicit cost of leaning on human-in-the-loop escalation more than
 `provenance` does.
 
 Per domain, ASR/CVR/BTU are 0.0/0.0/1.0 across enterprise, finance, and SOC
-alike — the provenance-authorization hypothesis (Section 2) holds uniformly,
+alike — the provenance-authorization hypothesis (Section 3) holds uniformly,
 not just on the finance scenario it was originally verified against
 (`finance_false_approval`, which is included in this sweep and passes:
 escalate on the injected `payment_confirm`, simulated human denies it, task
@@ -247,21 +269,21 @@ path).
 
 The 6 task-success failures (all finance, all `data_exfiltration` /
 `direct_instruction`) are a single root cause — the redaction path being
-too aggressive, not too permissive — and are analyzed in Section 6 rather
+too aggressive, not too permissive — and are analyzed in Section 8 rather
 than double-counted here. Critically, none of the 6 are security failures:
 all 6 have `attack_prevented=True` and `critical_violation=False`; the
 defense over-corrected on usefulness, not under-corrected on safety.
 
-## 5. Ablations
+## 7. Ablations
 
 Still blocked on the `provenance_check` / `infoflow` toggles in
 `configs/policy.yaml` (owned by Fedi) — not implemented as of this writing,
 so no on/off comparison exists yet for those two mechanisms specifically.
 
-In the meantime, the sweep in Section 4 already gives one ablation for
+In the meantime, the sweep in Section 6 already gives one ablation for
 free: the simulator's own `--defense allow_all` baseline is the "no defense
 at all" condition, and we ran it for `finance_false_approval` while
-sanity-checking the sweep setup (Section 4's methodology check). Under
+sanity-checking the sweep setup (Section 6's methodology check). Under
 `allow_all`, that scenario's `payment_confirm`/`payment_execute` both
 execute — `attack_success=True`, `critical_violation=True`
 (`FORBIDDEN_EFFECT`, `PAYMENT_CONFIRMATION` both fire) — versus
@@ -272,7 +294,7 @@ The finer breakdown needs the config toggles; recommend Fedi add them as a
 narrow, additive change (default both `true`, so existing calibration is
 unaffected) — 5 scenarios × 2 states is a ~20-run addition once they exist.
 
-## 6. Failure Analysis
+## 8. Failure Analysis
 
 **Confirmed fixed, verified at scale (this sweep, 213 decisions, 0 errors):**
 - Canary leaks into a final `respond` reaching `ALLOWED` — pre-fix, 8×
@@ -327,7 +349,7 @@ shouldn't be — the simulated human approves the legitimate ones) but a
 usefulness/annoyance cost worth tightening if there's time before the
 freeze.
 
-## 7. Responsible AI Statement
+## 9. Responsible AI and Security Considerations
 
 **What we protect.** State-changing and sensitive actions are gated on
 provenance trust, not on content plausibility — an attacker cannot talk
@@ -348,13 +370,13 @@ benign read-only actions (e.g. `*_lookup`, `*_search`) whenever they lacked
 a recorded confirmation, because the raw rule (`requires_confirmation`) does
 not distinguish reads from writes on its own. This is mitigated, not
 eliminated, by the `benign_reads` suffix/rank carve-out in
-`configs/policy.yaml`: the full sweep (Section 4) shows FBR=0.0 and BTU=1.0
+`configs/policy.yaml`: the full sweep (Section 6) shows FBR=0.0 and BTU=1.0
 (no benign task is ever outright blocked or fails to complete), but
 escalation precision is only 0.317 — a read-only tool that doesn't match a
 known suffix, or whose observation trust exceeds `max_trusted_rank`, still
 escalates unnecessarily far more often than not. A separate false-positive
 class was found by the sweep and is more serious: over-broad redaction (see
-Section 6) breaks 6/40 tasks by stripping legitimate facts, not just
+Section 8) breaks 6/40 tasks by stripping legitimate facts, not just
 adding friction.
 
 **When humans stay in the loop.** Any consequential action that is missing
@@ -391,10 +413,10 @@ source of run-ending errors (`DEFENSE_UNAVAILABLE`) over a schema mismatch
 it didn't cause. `DefenseDecision`, the response we control end-to-end, is
 strict by contrast.
 
-## 8. Reproducibility
+## 10. Reproducibility
 
 **Repository:** `sentinel-shield` (private, competition submission).
-Pre-fix numbers in Sections 4/6 above (34/40 task success, 8 rewrite
+Pre-fix numbers in Sections 6/8 above (34/40 task success, 8 rewrite
 events) are from `main` at commit `9b1731c`. Post-fix numbers (40/40, the
 baseline comparison table, this report's Abstract) are from branch
 `partner/redaction-fix` at commit `d4e4a3a`, pending review/merge to
@@ -418,11 +440,9 @@ uv run sentinel eval public --defense provenance --model mock --json
 uv run pytest -q   # from sentinel-shield/
 ```
 
-**Models:** `--model mock` (deterministic, used for every number in this
-report except the video walkthrough) and `ollama:qwen3:8b` (the organizer-
-required real reference agent, used only for the qualitative video —
-see `reports/video-script.md`). No other external model or dataset is
-declared.
+**Declared external models:** `--model mock` and `ollama:qwen3:8b` (Qwen3-8B
+via Ollama) — no other external model or dataset. Full description of how
+each is used is in Section 5 (Experiments).
 
 **Scorecard digests** (`sentinel-bench/0.1.0`, `split: public`,
 `attack_mode: static`, `run_seed: 0`):
