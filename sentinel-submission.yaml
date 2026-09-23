@@ -1,0 +1,19 @@
+name: sentinel-shield
+kind: defense
+api_version: v1
+team: TODO-team-name          # placeholder — fill in before submission, Fedi/team to confirm
+port: 8080
+models: []          # no external pretrained model inside the defense itself (rule-based
+                    # policy engine); Qwen3-8B is the organizer-supplied agent under test,
+                    # run by the simulator, not a component of this submission
+datasets: []        # no external dataset used
+resources:
+  memory: 1g
+  cpus: 1.0
+  gpus: 0
+description: >
+  Provenance-trust policy proxy (POST /v1/decision) resolving every candidate
+  action to allow/block/escalate/rewrite. Authorization traces to rank <=1
+  provenance (system_policy/authenticated_user); sensitivity-keyed tracking
+  redacts leaked restricted/confidential content from final responses. See
+  reports/technical-report.md for the full method and results.

@@ -243,3 +243,40 @@ green — see `reports/results.md` "Known issue" section for the full
 before/after. Nothing else changed on this branch besides
 `_observation_sensitive_strings` and its helpers plus
 `tests/test_redaction.py`.
+
+## 23/09 — Report restructure + submission dry-run (partner track, Claude Code)
+
+- **Task 1 (report restructure) done.** `reports/technical-report.md`
+  renumbered to match `docs/research-report-template.md` (found in the
+  starter kit) exactly: 1 Abstract, 2 Threat Model, 3 Hypothesis, 4 Method,
+  5 Experiments (**new** — pulled the "what we ran / models+hardware+seeds
+  / baselines compared" descriptive text out of Results and Reproducibility
+  into its own section, per the template), 6 Results, 7 Ablations, 8
+  Failure Analysis, 9 Responsible AI and Security Considerations
+  (retitled), 10 Reproducibility. No prose rewritten — only re-sectioned,
+  plus every internal "Section N" cross-reference fixed to the new
+  numbers (there were 9 of them). Ablations and Failure Analysis kept as
+  their own sections rather than folded fully into Experiments, since the
+  template itself defines them as separate numbered sections (5/7/8) —
+  flagging this reading in case the intent was a more literal merge.
+- **Task 4 (submission dry-run) done — found and fixed a real blocker.**
+  `uv run sentinel submission validate <repo>` (from
+  `sentinel-starter-kit/`) failed outright: no `Dockerfile` and no
+  `sentinel-submission.yaml` existed at the repo root, so the submission
+  would have been rejected by the static check regardless of defense
+  quality. Added both (root-level, doesn't touch `app/`/`configs/`):
+  `Dockerfile` (uv-based, non-root `USER 10001:10001`, port 8080, mirrors
+  the `python-defense` starter kit's shape) and `sentinel-submission.yaml`
+  (`models: []`/`datasets: []` — rule-based defense, no learned component;
+  `team:` left as a `TODO` placeholder, needs a real value before
+  submission). Re-ran validate: now `ok: true`, all 6 checks pass. Full
+  before/after output, plus what's still unverified (Docker image not
+  build-tested — daemon unreachable from this shell; report format
+  Markdown-vs-PDF unconfirmed — no submission link/format guidance exists
+  anywhere in this repo or the starter kit docs) in
+  `reports/submission-checklist.md`. `uv run pytest -q`: 23/23 green
+  (sanity check only, no app code touched).
+- **Task 5 (merge-prep note for Fedi) done** — see the dedicated section
+  above (regex/entropy/canary-grep summary for the 13:00 review).
+- **Task 2 (rehearsal) and task 3 (report screenshots) not started yet** —
+  in progress next.
