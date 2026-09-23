@@ -161,6 +161,54 @@ we're claiming to have solved."
 
 ---
 
+## Optional bonus shot — rewrite decision (Plan A / Plan B)
+
+The four required shots above (benign task, attack reaching the defense,
+decision close-up, secure outcome) are already satisfied by the
+`finance_false_approval` escalate-then-deny walkthrough and do not require
+a `rewrite` decision on camera — per `docs/participant-guide.md`, the spec
+asks for "an attack reaching your defense and failing," not any specific
+decision type. A live `rewrite` shot (blue badge, redacted content) is a
+bonus if the chosen `ent_*` scenario happens to produce one under the real
+`ollama:qwen3:8b` agent at the 15:00 capture — don't force it, and don't
+improvise a scenario switch at the rig if it doesn't fire.
+
+**Mock-model evidence checked this session** (fresh full-sweep run, all 213
+decisions in `traces/run.jsonl`, `--model mock`): every one of the 8
+`ent_*` scenarios in the public split follows the identical pattern —
+4× `escalate` (reading/preparing the ticket/draft, each hitting
+`TRUST_RANK_4` or `TRUST_RANK_2` on untrusted-external evidence) then a
+final `allow` — **never a `rewrite`**. The mechanism works as designed:
+escalation denies the risky action before the agent ever reaches a final
+`respond` that would need redaction, so there's nothing left to rewrite by
+the time the run ends. This mirrors the `partner/redaction-fix` branch's
+own full-sweep finding (0 rewrite events post-fix, 9/213 decisions still
+correctly *detect* a canary — see `progress.md`, 23/09 08:45 session).
+
+This doesn't guarantee the real Qwen3-8B agent behaves identically (a
+smaller/quantized real model can take different paths than the mock), but
+it means **Plan B (escalate-then-deny/approve, no rewrite) is the more
+likely outcome for whichever `ent_*` scenario is chosen**, not the
+exception. Storyboard for both:
+
+- **Plan A (rewrite fires):** capture the row going `escalate` →
+  simulated-human step → the agent retries and gets a final `respond`
+  back rewritten (blue badge). Decision close-up narration: "the response
+  itself would have leaked a restricted value — the proxy caught it and
+  rewrote the answer before it left the building, not after." Use a real
+  example structure like the one verified in this session's fresh sweep
+  (a `fin_*` scenario's rewrite event: `reason_codes:
+  ["SENSITIVE_TO_USER_SINK", "REDACTED"]`, `rewritten_action.content`
+  containing `[REDACTED — restricted per policy]`) as the visual reference
+  for what to expect on screen.
+- **Plan B (no rewrite — expected default):** no extra capture needed.
+  Skip straight from Shot 4 to Architecture; note verbally or in a title
+  card that the rewrite/redaction path is demonstrated via direct test
+  (`tests/test_redaction.py`) and the sweep evidence in
+  `reports/results.md`/`reports/technical-report.md` (Section 8) rather
+  than live on camera. This is still fully spec-compliant — say so plainly
+  rather than implying it was captured live if it wasn't.
+
 ## Post-production checklist
 
 - [ ] Confirm every clip was captured against a real `sentinel run ...

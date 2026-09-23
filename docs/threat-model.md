@@ -3,7 +3,7 @@
 This is the defender's-eye threat model: what SENTINEL Shield protects, what
 it assumes about the adversary, and where its coverage stops. It complements
 `docs/contract.md` (the verified simulator contract — request/response shape,
-escalation semantics) and `reports/technical-report.md` §1–2 (the full
+escalation semantics) and `reports/technical-report.md` §2–3 (the full
 narrative version with code references). This file is the quick-reference;
 the technical report is the argued version.
 
@@ -74,7 +74,7 @@ provenance rank 2 (`trusted_internal`) through rank 5
   the full sweep fail their task because a legitimate fact (an account ID,
   a transfer amount) sitting in the same document as a real secret gets
   redacted alongside it. See `reports/results.md` and
-  `reports/technical-report.md` §6. This is a usefulness failure, not a
+  `reports/technical-report.md` §8. This is a usefulness failure, not a
   safety one — nothing sensitive leaked in any of these cases — but it is a
   real instance of the exact failure mode ("blocking/over-correcting breaks
   benign work") this project is scored against.
