@@ -565,3 +565,75 @@ Added `test_prose_embedded_all_caps_canary_is_still_caught`.
   on both axes at once.
 
 Files touched: `app/main.py`, `tests/test_decision.py`. Not committed yet.
+
+## 23/09 — FINAL STATE (final submission pass, `bara3em`)
+
+**Team name**: `bara3em` (set in `sentinel-submission.yaml`, all lowercase,
+matches the manifest schema's `team: str` field — schema has no
+member-names field to fill in, `extra="forbid"`).
+
+**Redaction/policy fix history, merged to `main`** (three independent
+rounds this session, superseding the `partner/redaction-fix` branch
+referenced earlier in this file — that branch never actually landed;
+Fedi's later local commit `0f6dfd5` covering similar ground got rebased
+onto these and resolved in favor of the version below after two conflict
+blocks, confirmed via `uv run pytest -q` at each step):
+1. `19c195e` — rank-2 canary detection (was gated at rank>=3, missing
+   trusted_internal-sourced canaries entirely), dead `tool_permission`/
+   `requires_confirmation`/`prerequisite` rules (the real simulator never
+   sends a per-rule `tool` field, so the old `candidate_tool == rule["tool"]`
+   check could never fire against real traffic), encoded/embedded-secret
+   exfil detection (decode-then-search, matching the simulator's own leak
+   grader instead of encode-then-substring-match).
+2. `c5d0712` — the above fix over-corrected: tracking every string >=8
+   chars from any sensitivity-tagged record broke 10/49 benign tasks
+   (legitimate facts like `ACC-1001` sitting next to a real canary got
+   redacted/blocked too). Narrowed to a `label: value` + entropy heuristic;
+   added per-value sensitivity tiers (restricted vs. confidential) with
+   destination-aware sink checks, since not every canary is
+   allowed_destinations=[] in the simulator's own registry
+   (`fixtures/*/base.json`).
+3. `526dfca` — Fedi's local `0f6dfd5` rebased in; resolved to keep the
+   above (their independent version had the same two bugs — missing `iban`
+   keyword, entropy requiring upper+lower+digit which 3 of 4 canary kinds
+   here never satisfy — plus an emoji-corrupted line from a copy/paste
+   mishap); net diff after resolution was two blank lines.
+4. `35b0b25`, `ffb7724`, `4e431f8` — submission manifest team name, README
+   final pass (Results/Demonstration sections, architecture accuracy), and
+   the final `sentinel submission validate`/Docker/PDF checklist results
+   (see `reports/submission-checklist.md`).
+
+**Sweep numbers, current `main`:**
+- Mock model, full 49-scenario sweep (40 public + 9 validation), single
+  fresh pass: **49/49 task_success, 0/49 attack_success, 0/49
+  critical_violation.**
+- Real agent (`ollama:qwen3:8b`, Fedi's desktop rig), same 49 scenarios:
+  **0/49 attack_success, 0/49 critical_violation, 0/49 data_flow_violation**
+  — security holds identically under a real reasoning agent. Task
+  success dropped to 33/49; individually traced 9 of the 16 failures and
+  every one was agent-side (invented tool arguments, hallucinated task
+  completion it never performed, giving up early, phrasing that doesn't
+  match a strict substring grader) or a starter-kit tool-matching quirk —
+  never the defense over-blocking/over-escalating/mis-redacting. One
+  qwen3:8b run also looped calling the same already-successful
+  `ticket_update` 24 times before hitting `max_steps` (still passed,
+  worth a Failure Analysis mention: real small local models don't always
+  recognize a tool call already succeeded).
+- `reports/results.md`'s headline numbers (0/31 ASR, 0 CVR, 40/40 benign,
+  FBR 0.0, 0.902 official score vs. `provenance` baseline's 0.939) predate
+  this session's three fix rounds and describe the never-merged
+  `partner/redaction-fix` branch specifically — **not yet re-verified
+  against the current `main`**. The current code is strictly better (49/49
+  vs. that branch's documented 40/40, plus real-agent validation the old
+  report never had), so the numbers already in the README/report undersell
+  it, but `results.md`/`technical-report.md` haven't been rewritten to
+  match — flagging for whoever finalizes those before submission rather
+  than rewriting them unasked mid-freeze.
+
+**Final commit hash**: `4e431f8` at time of writing this entry — will move
+if items 7/8 of the final checklist land more commits before submission;
+re-check `git log -1` at the actual 23:00 submission step per
+`reports/submission-checklist.md`.
+
+**Video recorded**: _(placeholder — Fedi to confirm time)_.
+**Submitted**: _(placeholder — Fedi to confirm time)_.
