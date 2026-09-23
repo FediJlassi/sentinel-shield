@@ -134,31 +134,43 @@ Open http://127.0.0.1:8501. Full details in `dashboard/README.md`.
 
 ## Results
 
-Full public scenario sweep (40 scenarios, `--model mock`, deterministic):
+Full public scenario sweep (40 scenarios, `--model mock`, deterministic),
+plus the 9-scenario validation split and a real-agent (`ollama:qwen3:8b`)
+run of the full 49-scenario library:
 
-| Metric | Value |
-|---|---|
-| Attack success rate (ASR) | **0 / 31** attack-bearing scenarios succeeded |
-| Critical violation rate (CVR) | **0** |
-| Benign task completion | **40 / 40** |
-| False block rate (FBR) | **0.0** — no benign action ever outright blocked |
+| Split | ASR | CVR | Task success | Official score |
+|---|---|---|---|---|
+| Public (mock) | **0 / 31** | **0** | **40 / 40** | **0.987** |
+| Validation (mock) | **0 / 4** | **0** | **9 / 9** | **1.0** |
+| Combined (real agent, `qwen3:8b`) | **0 / 35** | **0** | 33 / 49 | — |
 
-Baselines, same split, same command (honest, no spin — see
-`reports/results.md` for the full table and per-domain breakdown):
+The real-agent task-success gap is agent-side, not defense-side — every
+failure individually traced (invented tool arguments, hallucinated task
+completion, phrasing that doesn't match a strict grader) held the same
+0/0 security result. See `reports/technical-report.md` Section 8 for the
+per-failure breakdown.
+
+Baselines, public split, same command (honest, no spin):
 
 - `allow_all` (no defense): every attack succeeds (ASR 1.0) — confirms the
   scenario library isn't accidentally already-safe.
-- `provenance` (starter kit's deterministic source→sink baseline) actually
-  **beats us on the official composite score** (0.939 vs our 0.902), because
-  the scoring formula penalizes our escalation volume harder than its false
-  blocks. Its FBR is 0.222 (it outright blocks real benign actions); ours is
-  0.0. We're the only one of the three with ASR = CVR = FBR = 0.0
-  simultaneously — the tradeoff is leaning on human-in-the-loop escalation
-  more than `provenance` does, not a free lunch.
+- `provenance` (starter kit's deterministic source→sink baseline) matches
+  us on ASR/CVR/task-success but has a real FBR of 0.222 (it outright
+  blocks benign actions we allow) and an official score of 0.939 — **we now
+  beat it** (0.987), after fixing a bug where `tool_permission`/
+  `requires_confirmation` never actually fired against real traffic (see
+  the technical report's Failure Analysis).
+- Our own FBR (0.049, not 0.0) is explained, not hidden: every instance is
+  a correctly-blocked malicious variant of a structurally-legitimate step
+  (the grader's "legitimate" label is positional, not content-aware), never
+  an actual benign task failing — task success stays 40/40. An ablation
+  (technical report Section 7) shows removing the mechanism responsible
+  would instead let 23 of 210 real decisions leak a tracked secret.
 
 See `reports/technical-report.md` for the full method, ablations, and
-failure analysis, `reports/results.md` for the scenario-by-scenario table,
-and `progress.md` for the day-by-day log.
+failure analysis, and `progress.md` for the day-by-day log.
+`reports/results.md` still describes an earlier, superseded fix state and
+needs a matching rewrite before submission.
 
 ## Demonstration
 
