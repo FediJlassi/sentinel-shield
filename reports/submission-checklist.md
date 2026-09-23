@@ -6,9 +6,12 @@ Built per partner's task list item 4, morning of 23/09 (freeze 15:00, submit
 ## Repository
 
 - URL: https://github.com/FediJlassi/sentinel-shield
-- Final commit hash: **TODO** — fill in at the 23:00 submission step, after
-  the `partner/redaction-fix` merge and any last-minute fixes land on `main`.
-  Do not fill this in early; a hash recorded now will be stale by freeze.
+- Final commit hash: **TODO** — fill in at the actual submission step, after
+  any last-minute fixes land on `main`. Do not fill this in early; a hash
+  recorded now will be stale by freeze. (The `partner/redaction-fix` branch
+  referenced in earlier drafts of this checklist never merged — it was
+  superseded by three independent fix rounds directly on `main`; see
+  `progress.md`'s 23/09 FINAL STATE entry.)
 
 ## Video
 

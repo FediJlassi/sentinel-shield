@@ -62,34 +62,39 @@ provenance rank 2 (`trusted_internal`) through rank 5
 | Fake approval / indirect injection | authorization requires rank ≤1 provenance; higher-rank evidence is logged (`TRUST_RANK_n`) but never authorizes | `app/decision.py` |
 | Multi-step setup-then-cash-in | run-scoped state + `history_digest.tool_calls` prerequisite check (prepare→confirm→execute) | `app/policy_engine.py`, `app/main.py: run_state` |
 | Untrusted/adversary-controlled evidence | fail-closed trust mapping (unknown/malformed `trust_level` → rank 5) | `app/firewall.py` |
-| Exfiltration of sensitive content | sensitivity-keyed (not trust-rank-keyed) scan of final `respond` actions, redacted in plain/base64/hex/reversed form | `app/main.py: update_run_state`, `scan_respond`, `_redact` |
+| Exfiltration of sensitive content | sensitivity-keyed (not trust-rank-keyed), destination-aware scan of every sink — final `respond` and tool-call arguments alike — redacted/blocked in plain, URL, base64, hex, rot13, and reversed form | `app/main.py: update_run_state`, `scan_exfil`, `_find_leaked`, `_redact` |
 | Escalation-as-bypass | not our mechanism — verified property of the simulator's `human_confirm`; we rely on it rather than re-implementing plan-matching ourselves | `docs/contract.md` |
 | Confirmation-relay abuse / DoS via retry loop | `request_confirmation` short-circuited to instant `allow` before any parsing | `app/main.py` |
 
 ## Residual risk / known gaps (honest, not aspirational)
 
-- **Over-broad redaction.** The exfiltration defense currently treats every
-  string ≥8 characters in a sensitivity-tagged observation as sensitive, not
-  just the actual canary value. This has a measured cost: 6/40 scenarios in
-  the full sweep fail their task because a legitimate fact (an account ID,
-  a transfer amount) sitting in the same document as a real secret gets
-  redacted alongside it. See `reports/results.md` and
-  `reports/technical-report.md` §8. This is a usefulness failure, not a
-  safety one — nothing sensitive leaked in any of these cases — but it is a
-  real instance of the exact failure mode ("blocking/over-correcting breaks
-  benign work") this project is scored against.
+- **Non-zero false-block rate on the public split (0.049), explained, not
+  eliminated.** Every instance found is a correctly-blocked malicious
+  variant of a structurally-legitimate step (the grader's "legitimate"
+  label is positional, matched against the reference plan's tool/step, not
+  content-aware) — task success remains 40/40 and BTU is 1.0. See
+  `reports/results.md`'s "Known behavior" section for a concrete
+  decision-trace example. This previously manifested as a much worse,
+  genuine usefulness bug (over-broad string tracking breaking 10/49 tasks
+  by redacting legitimate facts alongside real secrets); that root cause is
+  fixed (`reports/technical-report.md` §8), and this residual number is a
+  grading-label artifact rather than a recurrence of it.
 - **`data_flow` and `forbidden_effect` rule kinds are stubbed.**
   `policy_engine.py` passes them through un-triggered rather than silently
   dropping them, but does not independently enforce them beyond the
-  sensitivity-keyed respond-scan above. A `data_flow` rule with semantics
-  we haven't anticipated would not currently do anything on its own.
-  (`configs/policy.yaml` ablation toggles for exercising this deliberately
-  are a standing TODO — see `progress.md`.)
-- **Escalation is over-used, not incorrectly used.** Escalation precision
-  in the full sweep is 0.317 (most escalations resolve as "was actually
-  fine") — a friction/usefulness cost, not a correctness bug, since the
-  simulated human still approves the legitimate ones and no benign task
-  fails because of it (BTU = 1.0).
+  sensitivity-keyed sink-scan above. A `data_flow` rule with semantics we
+  haven't anticipated would not currently do anything on its own. No config
+  toggle exists to exercise this in isolation; the ablation in
+  `reports/technical-report.md` §7 instead replays real captured decisions
+  through the pipeline with and without the sink-scan layer directly.
+- **Escalation is precise but rare by design, not absent.** Unconfirmed
+  `critical`-severity actions (an unconfirmed payment/remediation
+  execution) are blocked outright rather than escalated, since these
+  aren't cases of genuine uncertainty; escalation is reserved for
+  `high`-severity or less clear-cut cases. Escalation precision in the full
+  sweep is 1.0 (every escalation this sweep was on a genuinely unconfirmed
+  action) — a real change from an earlier, much noisier calibration
+  (precision 0.317) documented in `progress.md`.
 - **Out of scope entirely:** anything that doesn't pass through
   `POST /v1/decision`. If an agent implementation had a path to act without
   calling the proxy, this defense has no visibility into it — its authority
