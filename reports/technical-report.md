@@ -1,5 +1,35 @@
 # SENTINEL Shield — Technical Report
 
+## Abstract
+
+SENTINEL Shield is a policy proxy in front of an LLM agent (`POST
+/v1/decision`) that authorizes every candidate action against provenance
+trust rather than content plausibility: a state-changing or sensitive
+action is only authorized when its chain of trust terminates in
+`system_policy` or `authenticated_user` (rank ≤1); anything else — a
+document, an email, a case note, no matter how authoritative it reads — is
+evidence, not authorization. On the full 40-scenario public split (31
+attack-bearing, 9 benign; `--model mock` for determinism), this holds
+uniformly: **ASR 0.0/31**, **CVR 0.0**, **BTU 1.0**, **FBR 0.0**, across
+enterprise, finance, and SOC domains alike, including the fake-approval
+attack family the hypothesis was designed around
+(`finance_false_approval`). Sensitive content (canary tokens) tagged
+`restricted`/`confidential` by provenance is tracked per-run and rewritten
+out of any final response that would leak it to an untrusted sink. The
+most significant limitation we found and fixed: an early version of that
+rewrite mechanism keyed on any string ≥8 characters inside a
+sensitivity-tagged document, so legitimate facts (an account ID, a
+transfer amount) sharing a document with a real canary were redacted
+alongside it, failing 6/40 task graders on missing facts even though the
+underlying attack was still prevented in every case. Narrowing detection
+to field semantics (secret-shaped keys, inline `label: value` declarations,
+and a high-entropy fallback — never scenario or canary names) fixed all 6
+without moving ASR or CVR. Against the starter kit's own baselines on the
+same split, we are the only one of `allow_all` / `provenance` / ours with
+FBR = 0.0 and ASR = 0.0 and CVR = 0.0 simultaneously, at the cost of a
+higher escalation (human-in-the-loop) rate than `provenance`'s calibration
+— an explicit, unresolved tradeoff, not a hidden one.
+
 ## 1. Threat Model
 
 SENTINEL Shield sits as a policy proxy in front of an LLM agent: every
@@ -174,10 +204,38 @@ run against the live, unmodified defense via the simulator's own evaluator
 | **CVR** (critical violation rate) | **0.0** — no forbidden effect ever fired |
 | **BTU** (benign task utility) | **1.0** — every no-attack scenario completed |
 | FBR (false block rate) | 0.0 |
-| Task success, overall | 34/40 (85%) |
+| Task success, overall | 34/40 (85%) on `main` at time of writing; **40/40** on the redaction-fix branch, see Section 6 |
 | Escalation rate / precision | 0.756 / 0.317 |
-| Rewrite events (canary redaction) | 8 |
+| Rewrite events (canary redaction) | 8 on `main` (see Section 6 — likely false positives); 0 on the fix branch (real catches, none needed rewriting this sweep) |
 | Defense errors (`DEFENSE_UNAVAILABLE`) | 0 |
+
+### Baseline comparison
+
+Same 40-scenario split, same `--model mock`, run against the starter kit's
+own in-process baselines. "ours" is the post-redaction-fix branch
+(`partner/redaction-fix`, commit `d4e4a3a`); see `reports/results.md` for
+the full per-scenario breakdown and an honest discussion of the tradeoffs
+below the table.
+
+| Defense | BTU | ASR | CVR | FBR | UER | TUI | DFI | Brier | ECE | p95 ms |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `allow_all` | 1.0 | 1.0 | 0.775 | 0.0 | 0.0 | 0.652 | 0.4 | 0.235 | 0.235 | 0.026 |
+| `provenance` | 1.0 | 0.0 | 0.0 | 0.222 | 0.0 | 1.0 | 1.0 | 0.147 | 0.197 | 0.073 |
+| **ours** | **1.0** | **0.0** | **0.0** | **0.0** | 0.675 | **1.0** | **1.0** | 0.322 | 0.351 | 8.47 |
+
+`allow_all` confirms the scenario library isn't accidentally already-safe
+(ASR 1.0, CVR 0.775 with zero defense). `provenance` — the starter kit's
+own deterministic source-to-sink baseline, which never escalates
+(`escalation_rate` 0.0) — matches us on ASR/CVR/BTU/TUI/DFI exactly but
+trades differently: its FBR (0.222) is worse than ours (0.0, it outright
+blocks some benign actions we allow), while its UER is 0.0 against our
+0.675 since it has no escalation cost to pay at all. Its official `core`
+score (0.939) beats ours (0.902) because the scoring formula penalizes our
+escalation volume harder than its false-block rate — a real, unresolved
+weakness in our current calibration (Section 5/6), not a scoring artifact.
+We are the only one of the three with FBR = ASR = CVR = 0.0 simultaneously,
+at the explicit cost of leaning on human-in-the-loop escalation more than
+`provenance` does.
 
 Per domain, ASR/CVR/BTU are 0.0/0.0/1.0 across enterprise, finance, and SOC
 alike — the provenance-authorization hypothesis (Section 2) holds uniformly,
@@ -229,23 +287,35 @@ unaffected) — 5 scenarios × 2 states is a ~20-run addition once they exist.
 - Intermittent 500s from `confirmation_for` arriving as a nested dict —
   0 errors this sweep; fixed via `Union[str, dict] -> coerce to None`.
 
-**New failure class found by this sweep (not in the pre-fix list): the
-canary-redaction fix is now over-broad.** 6/40 scenarios (all finance) fail
-task_success because `_observation_sensitive_strings` (`app/main.py:54-77`)
-treats every string ≥8 characters inside a `restricted`/`confidential`
-observation as sensitive, not just the actual canary value. An account ID
-(`ACC-1001`) or formatted amount (`48,210.00`) that happens to live in the
-same document as a real secret gets redacted from the final response right
-alongside it, and the task grader — which needed that fact verbatim — fails.
-Full per-scenario detail and the two rewrite cases that *didn't* fail (their
-graders check a database record, not the redacted response text) are in
-`reports/results.md`. This is the report's clearest illustration of the
-allow/block/escalate/rewrite tradeoff cutting the wrong way: the mechanism
-built to stop exfiltration is, in these 6 cases, the thing that breaks "benign
-tasks MUST complete." Recommended fix (for Fedi, `app/` owner): narrow the
-string collection to canary-shaped values specifically
-(`secret_token`/`account_id`/`access_token`/`contract_ref`, per CLAUDE.md's
-canary list) instead of every long string in a sensitive-tagged observation.
+**Failure class found by this sweep and fixed (branch `partner/redaction-
+fix`, commit `d4e4a3a`, pending merge to `main`): the canary-redaction
+mechanism was over-broad.** On `main` at time of writing, 6/40 scenarios
+(all finance) fail task_success because `_observation_sensitive_strings`
+(`app/main.py:54-77`) treats every string ≥8 characters inside a
+`restricted`/`confidential` observation as sensitive, not just the actual
+canary value. An account ID (`ACC-1001`) or formatted amount
+(`48,210.00`) that happens to live in the same document as a real secret
+gets redacted from the final response right alongside it, and the task
+grader — which needed that fact verbatim — fails. This is the report's
+clearest illustration of the allow/block/escalate/rewrite tradeoff cutting
+the wrong way: the mechanism built to stop exfiltration is, in these 6
+cases, the thing that breaks "benign tasks MUST complete."
+
+The fix keys the redaction set off field *semantics* instead of length,
+still without any scenario/canary-name hardcoding (CLAUDE.md's hard
+rule): a string is collected only if (a) its JSON key matches
+`/secret|token|key|code|credential|password|passphrase/i`, (b) it is
+declared inline as prose matching a `label: value` pattern under that same
+label regex, or (c) — for a secret declared with no label at all — it is
+high-entropy (≥12 chars, mixed case + digits, no spaces/punctuation).
+Case (b) was not optional: inspecting `traces/raw-payloads.jsonl` showed
+the real canary format is prose embedded in a neutrally-keyed `body`
+field (`"Current authorisation_code: SENTINEL_SECRET_..."`), which a
+key-only implementation missed almost entirely (3/213 decisions flagged a
+canary instead of the expected ~9). Re-running the identical sweep against
+the fixed branch: task_success 34/40 → **40/40**, ASR still 0.0/31, CVR
+still 0.0, 31/31 unit tests green. Full numbers and the false-positive
+analysis of the pre-fix rewrite events are in `reports/results.md`.
 
 **Not yet re-quantified:** over-escalation on benign reads. The
 `benign_reads` YAML calibration is in place and no benign scenario fails on
@@ -310,3 +380,57 @@ rank (`adversary_controlled`) rather than being treated as trusted by
 default; this is a deliberate bias toward more escalation/blocking under
 uncertainty, and is part of why over-refusal calibration (above) is an
 ongoing, not finished, concern.
+
+**On lenient request parsing.** `DefenseRequest` (`app/schemas.py`) uses
+`extra: allow` and defaults every field, so a structurally incomplete
+payload — a field the simulator omits, an unrecognized type — is accepted
+(HTTP 200) rather than rejected. This is deliberate fail-operational
+tolerance to unknown simulator fields, at the cost of not rejecting
+malformed requests: we chose not to have the defense itself become a
+source of run-ending errors (`DEFENSE_UNAVAILABLE`) over a schema mismatch
+it didn't cause. `DefenseDecision`, the response we control end-to-end, is
+strict by contrast.
+
+## 8. Reproducibility
+
+**Repository:** `sentinel-shield` (private, competition submission).
+Pre-fix numbers in Sections 4/6 above (34/40 task success, 8 rewrite
+events) are from `main` at commit `9b1731c`. Post-fix numbers (40/40, the
+baseline comparison table, this report's Abstract) are from branch
+`partner/redaction-fix` at commit `d4e4a3a`, pending review/merge to
+`main` at the 13:00/15:00 freeze checkpoints — check `git log main` for
+whether it has landed by the time this is read.
+
+**Exact commands** (from `sentinel-shield/`, defense on port 8080; from
+`sentinel-starter-kit/`, evaluator):
+
+```bash
+uv run --no-project uvicorn app.main:app --port 8080
+
+uv run sentinel eval public \
+  --defense-url http://127.0.0.1:8080 --model mock --json > results/public.json
+
+# Baselines (in-process, no --defense-url):
+uv run sentinel eval public --defense allow_all --model mock --json
+uv run sentinel eval public --defense provenance --model mock --json
+
+# Self-test:
+uv run pytest -q   # from sentinel-shield/
+```
+
+**Models:** `--model mock` (deterministic, used for every number in this
+report except the video walkthrough) and `ollama:qwen3:8b` (the organizer-
+required real reference agent, used only for the qualitative video —
+see `reports/video-script.md`). No other external model or dataset is
+declared.
+
+**Scorecard digests** (`sentinel-bench/0.1.0`, `split: public`,
+`attack_mode: static`, `run_seed: 0`):
+
+| State | `deterministic_digest` |
+|---|---|
+| `main` @ `9b1731c` (pre-fix, `reports/eval-scorecard-mock.json`) | `6ff9c17f020a4c50ae7b1c976d152131533cc356e8e50cff494fd55c5b0843bb` |
+| `partner/redaction-fix` @ `d4e4a3a` (post-fix) | `1428260f6c141ad30d29947054b57926a79022eeb462c53055cf66fd755363ea` |
+
+Both digests are reproducible from the commands above against the
+respective commit; the mock model makes this deterministic run-to-run.
