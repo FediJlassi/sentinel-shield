@@ -211,3 +211,35 @@
 - **User confirmed**: not going to Fedi's rig early — video capture waits
   for Fedi at ~15:00-16:00 as originally planned. Continuing with prep
   (OBS/storyboard dry-run/shot list) rather than capture until then.
+
+## 23/09 — Merge-prep note for Fedi (10:00 review, `partner/redaction-fix` @ `d4e4a3a`)
+
+Three things to check, should be a 10-minute review:
+
+1. **`label: value` regex** (`app/main.py`, branch `partner/redaction-fix`):
+   `LABELED_VALUE_RE = r"([A-Za-z][A-Za-z0-9_\-]*)\s*:\s*([^\s.,;]+)"`. A
+   match only counts as sensitive if the label side also matches
+   `SENSITIVE_KEY_RE = /secret|token|key|code|credential|password|passphrase/i`
+   and the value is ≥8 chars. This is the pass that catches the real canary
+   format (`"Current authorisation_code: SENTINEL_SECRET_..."` inside a
+   neutrally-keyed `body` field) — key-only matching missed it almost
+   entirely (3/213 decisions vs. the expected ~9).
+2. **Entropy fallback threshold** (same file, `_is_high_entropy`): unlabeled
+   string ≥12 chars, `isalnum()`, and has upper + lower + digit all three.
+   No spaces/punctuation allowed (so `ACC-1001` and `48,210.00` — the two
+   facts that were previously over-redacted — don't qualify: the hyphen and
+   comma/period disqualify them).
+3. **No canary names in `app/`, confirmed both branches**:
+   `git grep -niE "sentinel_secret|canary|ent_backup|ent_licence|ent_portal|
+   ent_sso|finance_false_approval|soc_hostile" -- app/` on `main` and
+   `partner/redaction-fix` returns only comments explaining the *concept*
+   of a canary/sensitivity field and one illustrative example string inside
+   a comment — nothing that branches on a scenario or canary name in actual
+   logic.
+
+Verification: full 40-scenario mock sweep on this branch is task_success
+40/40 (was 34/40 on `main`), ASR/CVR unchanged at 0.0, 31/31 unit tests
+green — see `reports/results.md` "Known issue" section for the full
+before/after. Nothing else changed on this branch besides
+`_observation_sensitive_strings` and its helpers plus
+`tests/test_redaction.py`.
