@@ -92,6 +92,7 @@ def _extract_candidate_secrets(text: str) -> list[str]:
     return found
 
 
+
 def _observation_sensitive_strings(observation, provenance_map) -> list[str]:
     if observation is None:
         return []
@@ -142,6 +143,7 @@ def _observation_sensitivity(observation, provenance_map) -> str:
         if (prov.get("sensitivity") or "").lower() == "restricted":
             level = "restricted"
     return level
+
 
 
 def update_run_state(request: DefenseRequest) -> list[str]:
