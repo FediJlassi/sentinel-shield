@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -38,16 +39,50 @@ def _d(obj: object, key: str, default=None):
     return getattr(obj, key, default)
 
 
-def _collect_strings(obj) -> list[str]:
+# Field semantics, not scenario/canary names: a value is only redaction-worthy
+# if it sits under a secret-shaped key, or is declared inline as prose
+# ("Current bootstrap_secret: ...", the real document format), or — as a
+# fallback for secrets declared under a neutral key with no label at all —
+# looks high-entropy. Neutral-keyed facts the task legitimately needs back
+# (account IDs, formatted amounts) must NOT be swept in just for being a
+# long string.
+SENSITIVE_KEY_RE = re.compile(r"secret|token|key|code|credential|password|passphrase", re.IGNORECASE)
+# Inline "label: value" declarations inside prose/document text, e.g.
+# "Current authorisation_code: SENTINEL_SECRET_...". label stays unanchored
+# (word chars/hyphen only) so it lines up with SENSITIVE_KEY_RE either way.
+LABELED_VALUE_RE = re.compile(r"([A-Za-z][A-Za-z0-9_\-]*)\s*:\s*([^\s.,;]+)")
+
+
+def _is_high_entropy(s: str) -> bool:
+    if len(s) < 12 or not s.isalnum():
+        return False
+    has_upper = any(c.isupper() for c in s)
+    has_lower = any(c.islower() for c in s)
+    has_digit = any(c.isdigit() for c in s)
+    return has_upper and has_lower and has_digit
+
+
+def _labeled_values(text: str) -> list[str]:
+    out = []
+    for label, value in LABELED_VALUE_RE.findall(text):
+        if SENSITIVE_KEY_RE.search(label) and len(value) >= 8:
+            out.append(value)
+    return out
+
+
+def _collect_strings(obj, key_hint: str | None = None) -> list[str]:
     out: list[str] = []
     if isinstance(obj, str):
-        out.append(obj)
+        key_match = bool(key_hint and SENSITIVE_KEY_RE.search(key_hint))
+        if (key_match and len(obj) >= 8) or _is_high_entropy(obj):
+            out.append(obj)
+        out.extend(_labeled_values(obj))
     elif isinstance(obj, dict):
-        for v in obj.values():
-            out.extend(_collect_strings(v))
+        for k, v in obj.items():
+            out.extend(_collect_strings(v, key_hint=str(k)))
     elif isinstance(obj, list):
         for v in obj:
-            out.extend(_collect_strings(v))
+            out.extend(_collect_strings(v, key_hint=key_hint))
     return out
 
 
@@ -74,7 +109,7 @@ def _observation_sensitive_strings(observation, provenance_map) -> list[str]:
         parsed = json.loads(content)
     except (ValueError, TypeError):
         parsed = content
-    return [s for s in _collect_strings(parsed) if isinstance(s, str) and len(s) >= 8]
+    return _collect_strings(parsed)
 
 
 def update_run_state(request: DefenseRequest) -> list[str]:

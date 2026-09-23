@@ -156,7 +156,7 @@ def _observation_step(run_id, sensitivity="restricted"):
         "user_goal": "research",
         "observation": {
             "kind": "doc",
-            "content": '{"note": "' + CANARY + '", "ok": true}',
+            "content": '{"secret_token": "' + CANARY + '", "ok": true}',
             "provenance_ids": ["prov-r"],
         },
         "candidate_action": {"type": "tool_call", "tool": "read_file", "arguments": {}},
