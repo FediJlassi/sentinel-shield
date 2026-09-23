@@ -171,7 +171,43 @@
   full allow/rewrite integration paths) + `tests/test_decision.py` updated
   (synthetic canary moved under a `secret_token` key to stay meaningful
   under the new semantics). Full suite: 31/31 green.
-- Not yet started: task 2 (baseline sweep — allow_all / provenance),
-  task 3 (report abstract + reproducibility), task 4 (video prep — needs
-  user to confirm rig access today), task 5 (ablation toggles, only if
-  time permits).
+- Not yet started: task 4 (video prep — user confirmed waiting for Fedi
+  at ~15:00, not going to the rig early), task 5 (ablation toggles, only
+  if time permits).
+
+## 23/09 09:30-10:00 — Partner track (Claude Code), Session 5 continued
+
+- **Task 2 (baseline sweep) done.** Ran `allow_all` and `provenance`
+  in-process baselines against the full 40-scenario public split, mock
+  model (`uv run sentinel eval public --defense <name> --model mock
+  --json`, no `--defense-url` needed for these). `allow_all`: ASR 1.0,
+  CVR 0.775 (confirms the library isn't accidentally already-safe).
+  `provenance`: ASR 0.0, CVR 0.0, matches us on safety metrics but beats
+  our official `core` score (0.939 vs our 0.902) — it never escalates
+  (`escalation_rate` 0.0) so pays 0 UER, but trades that for worse FBR
+  (0.222 vs our 0.0). Full table + honest discussion in
+  `reports/results.md` ("Baseline comparison") and
+  `reports/technical-report.md` (Results section) — **not spun as a win**,
+  the report says plainly that `provenance` currently outscores us on the
+  official metric and explains why (escalation-volume penalty > their
+  false-block penalty in the scoring formula).
+- **Task 3 (Abstract + Reproducibility) done.** Added a 100-200 word
+  Abstract and a Reproducibility section (commit hashes, exact commands,
+  both pre-fix and post-fix `deterministic_digest`, mock-model note) to
+  `reports/technical-report.md` — neither existed before, both are
+  required by `docs/research-report-template.md` (found in the starter
+  kit, not previously referenced anywhere in this repo — worth checking
+  the rest of the report structure against it before final assembly:
+  template wants numbered sections 1-10 incl. a standalone "Experiments"
+  section; ours currently folds that into Method/Results and isn't
+  renumbered to match. Didn't restructure everything — out of scope for
+  this task and risked breaking cross-references under time pressure —
+  but flagging for the 18:00-21:00 final assembly pass). Also added the
+  lenient-request-schema honesty line to Responsible AI verbatim per
+  Fedi's wording.
+- Both commits pushed straight to `main` (reports/ is this session's own
+  ownership, no branch/review needed) — commits `d9a1596` (progress log)
+  and `5dfba68` (baseline sweep + report sections).
+- **User confirmed**: not going to Fedi's rig early — video capture waits
+  for Fedi at ~15:00-16:00 as originally planned. Continuing with prep
+  (OBS/storyboard dry-run/shot list) rather than capture until then.
