@@ -1,6 +1,28 @@
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
 traces/
 data/
+artifacts/
+
+# editor / AI-tool local config — not part of the project
 .vscode/
+.idea/
+.kilo/
+
+# secrets — never commit these
+.env
+.env.*
+*.pem
+*.key
+*.p12
+.netrc
+.npmrc
+.pypirc
+id_rsa
+id_ed25519
+
+# OS junk
+.DS_Store
+Thumbs.db
