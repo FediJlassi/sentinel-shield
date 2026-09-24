@@ -131,6 +131,13 @@ from behavior — it is printed on every relevant decision.
 
 ## 4. Method
 
+![SENTINEL Shield architecture: untrusted input is tagged by the Observation Firewall, the agent's candidate action is checked by the Proxy Guardrail (rules + exfiltration check + risk score), which routes to allow, block/rewrite, or escalate to a human, before reaching the Tool Gateway; every decision and the resulting new observation are appended to the trace and loop back into the next step.](diagrams/architecture.png)
+
+*Figure 1 — request/decision flow. Every candidate action passes through the
+Proxy Guardrail before the Tool Gateway ever executes it; the only paths
+out are allow, block/rewrite, or escalate to a human, and every outcome is
+appended to the hash-chained trace that feeds the dashboard.*
+
 Architecture as implemented in `app/` today (code frozen at commit
 `63b692b` for this report; see Section 10 for the exact state and how this
 differs from earlier internal notes):

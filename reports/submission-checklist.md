@@ -134,15 +134,20 @@ Dockerfile's contents, not build it), but that doesn't guarantee the image
 actually builds — **needs a real `docker build` + a smoke-test `POST
 /v1/decision` inside the container before submitting.**
 
-## PDF export — untested, no tool available
+## PDF export — done (24/09)
 
-`pandoc` is not installed (`pandoc: command not found`), and no fallback
-(`weasyprint`, `wkhtmltopdf`) is available either — checked and confirmed
-absent, did not install anything given the code/environment freeze.
-`reports/technical-report.pdf` was **not created**. `reports/technical-report.md`
-remains the only committed form. Per the earlier open item below, whether a
-PDF is actually required is still unconfirmed against the real submission
-instructions (not available from this repo or the starter kit docs).
+`pandoc` still isn't installed system-wide, but `weasyprint` + `markdown`
+installed cleanly as an ephemeral `uv run --with` environment (no changes
+to the project's own `pyproject.toml`/`.venv`). `reports/technical-report.pdf`
+is now committed: a proper cover page (title, team, repo, generation date),
+the architecture diagram (`reports/diagrams/architecture.png`, embedded in
+Section 4) rendered inline, styled headings/tables/code blocks, and
+page-numbered footers — 15 pages, ~236KB. Both `reports/technical-report.md`
+(source of truth, edited going forward) and the `.pdf` (regenerate from it
+before any future submission) are committed. Whether a PDF is actually
+*required* by the real submission instructions is still unconfirmed (not
+available from this repo or the starter kit docs) — but the option now
+exists either way.
 
 ## Still open before submission
 
@@ -151,8 +156,7 @@ instructions (not available from this repo or the starter kit docs).
    submission instructions.
 3. Build-test the Docker image at least once (untested from this session,
    see above).
-4. Export `reports/technical-report.md` to PDF if the submission format
-   requires it (no tool available in this session, see above).
+4. ~~Export `reports/technical-report.md` to PDF~~ — done, see above.
 5. Video capture, filename, and final duration.
 6. Final commit hash, recorded last, after all freeze-window merges land —
    see `progress.md`'s FINAL STATE entry for the current one at time of
